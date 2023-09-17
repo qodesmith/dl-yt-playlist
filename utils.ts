@@ -7,35 +7,35 @@ import {ResponseData} from './youtubeApiCalls'
 export function getVideoIdsFromPlaylistResponse(playlistResponse: {
   data: youtube_v3.Schema$PlaylistItemListResponse
 }): string[] {
+  if (!playlistResponse.data.items) {
+    throw new Error('Missing playlistResponse.data.items')
+  }
+
   return playlistResponse.data.items.map(({contentDetails}) => {
+    if (!contentDetails?.videoId) {
+      throw new Error('contentDetails or videoId missing from playlist item')
+    }
+
     return contentDetails.videoId
   })
 }
 
-export function getUnavailableVideos({
+export function getUnavailableVideoPlaylistItemIds({
   playlistResponse,
   videosResponse,
-}: ResponseData) {
-  const playlistItems = playlistResponse.data.items
-  const videoItems = videosResponse.data.items
+}: ResponseData): string[] | undefined {
+  const playlistItems = playlistResponse.data.items ?? []
+  const videoItems = videosResponse.data.items ?? []
   const videoIdSet = new Set(videoItems.map(({id}) => id))
   const missingPlaylistVideos = playlistItems.filter(
-    ({contentDetails}) => !videoIdSet.has(contentDetails.videoId)
+    ({contentDetails}) => !videoIdSet.has(contentDetails?.videoId)
   )
 
   if (missingPlaylistVideos.length) {
-    console.log('MISSING VIDEOS:')
-    console.log(
-      missingPlaylistVideos.map(item => {
-        const videoId = item.snippet.resourceId.videoId
-        const {playlistId, position} = item.snippet // Position is 0-indexed.
-        const urlInPlaylist = `https://www.youtube.com/watch?v=${videoId}&list=${playlistId}&index=${
-          position + 1
-        }`
-
-        return {...item, urlInPlaylist}
-      })
-    )
+    return missingPlaylistVideos.reduce((acc: string[], {id}) => {
+      if (id) acc.push(id)
+      return acc
+    }, [])
   }
 }
 
@@ -60,26 +60,38 @@ type Video = {
 export function getVideoDataFromResponse(response: {
   data: youtube_v3.Schema$VideoListResponse
 }): Video[] {
-  return response.data.items.reduce((acc: Video[], item) => {
+  return (response.data.items ?? []).reduce((acc: Video[], item) => {
     const {id} = item
-    const {channelTitle: channel, title, publishedAt} = item.snippet
+    const {channelTitle: channel, title, publishedAt} = item.snippet ?? {}
     const url = `https://www.youtube.com/watch?v=${id}`
-    const lengthInSeconds = parseISO8601Duration(item.contentDetails.duration)
-    const video = {id, title, channel, publishedAt, url, lengthInSeconds}
+    const lengthInSeconds = parseISO8601Duration(item.contentDetails?.duration)
 
-    if (lengthInSeconds > 60 * 6) {
-      console.log('LONG VIDEO:', video)
+    if (lengthInSeconds !== null && lengthInSeconds > 60 * 6) {
+      console.log('LONG VIDEO:', {
+        id,
+        title,
+        channel,
+        publishedAt,
+        url,
+        lengthInSeconds,
+      })
     }
 
-    acc.push(video)
+    if (!id || !title || !channel || !publishedAt || lengthInSeconds === null) {
+      throw new Error('Property missing from video')
+    }
+
+    acc.push({id, title, channel, publishedAt, url, lengthInSeconds})
     return acc
   }, [])
 }
 
-function parseISO8601Duration(durationString) {
+function parseISO8601Duration(durationString: string | undefined | null) {
+  if (!durationString) return null
+
   const regex =
     /^P(?:(\d+)Y)?(?:(\d+)M)?(?:(\d+)W)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d{1,3})?)S)?)?$/
-  const matches = durationString.match(regex)
+  const matches = durationString.match(regex) ?? []
   const years = matches[1] ? parseInt(matches[1]) : 0
   const months = matches[2] ? parseInt(matches[2]) : 0
   const weeks = matches[3] ? parseInt(matches[3]) : 0
