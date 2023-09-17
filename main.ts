@@ -22,10 +22,10 @@ import * as fs from 'node:fs'
 import * as google from '@googleapis/youtube'
 const yt = google.youtube({version: 'v3', auth: process.env.API_KEY})
 
-type ApiData = {
+type ResponseData = {
   playlistResponse: GaxiosResponse<youtube_v3.Schema$PlaylistItemListResponse>
   videosResponse: GaxiosResponse<youtube_v3.Schema$VideoListResponse>
-}[]
+}
 
 type Video = {
   id: string
@@ -51,10 +51,10 @@ async function genResponses({
   maxResults = 50,
 }: {
   playlistId: string
-  data?: ApiData
+  data?: ResponseData[]
   pageToken?: string
   maxResults?: number
-}): Promise<ApiData> {
+}): Promise<ResponseData[]> {
   // https://developers.google.com/youtube/v3/docs/playlistItems/list
   const playlistResponse = await yt.playlistItems.list({
     // Required params.
