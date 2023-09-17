@@ -18,9 +18,11 @@ import * as fs from 'node:fs'
 import {genFullResponseData} from './youtubeApiCalls'
 import {getVideoDataFromResponse} from './utils'
 
-// @ts-expect-error - Bun runs top-level await just fine.
+const {PLAYLIST_ID} = process.env
+if (!PLAYLIST_ID) throw new Error('Missing PLAYLIST_ID env variable.')
+
 const responses = await genFullResponseData({
-  playlistId: process.env.PLAYLIST_ID,
+  playlistId: PLAYLIST_ID,
   maxResults: 50,
   data: [],
 })
