@@ -1,0 +1,8 @@
+{
+  "dependencies": {
+    "@googleapis/youtube": "^11.0.1"
+  },
+  "devDependencies": {
+    "bun-types": "^1.0.2"
+  }
+}
