@@ -26,10 +26,10 @@ const fullData = await genFullData({
 
 if (!fs.existsSync('data')) fs.mkdirSync('data')
 Bun.write(
-  `./data/${process.env.PLAYLIST_ID}_responses.json`,
+  `./data/${PLAYLIST_ID}_responses.json`,
   JSON.stringify(fullData, null, 2)
 )
 Bun.write(
-  `./data/${process.env.PLAYLIST_ID}_videos.json`,
+  `./data/${PLAYLIST_ID}_videos.json`,
   JSON.stringify(getVideoMetadata(fullData), null, 2)
 )
