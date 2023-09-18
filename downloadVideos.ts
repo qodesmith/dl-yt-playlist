@@ -9,4 +9,4 @@ const videos: Video[] = await Bun.file(`./data/${PLAYLIST_ID}_videos.json`, {
 
 if (!fs.existsSync('data/audio')) fs.mkdirSync('data/audio')
 
-await downloadAllVideos(videos, existingIds)
+await downloadAllVideos({videos, existingIds, maxLengthInSeconds: 60 * 11})

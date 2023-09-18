@@ -140,29 +140,44 @@ function downloadVideo(videoUrl: string): Promise<void> {
  * Download all YouTube videos as mp3 files using the `yt-dlp` command line
  * package.
  */
-export async function downloadAllVideos(
-  videos: Video[],
+export async function downloadAllVideos({
+  videos,
+  existingIds,
+  maxLengthInSeconds,
+}: {
+  videos: Video[]
   existingIds: Set<string>
-) {
+  maxLengthInSeconds: number
+}) {
   // Avoid fetching and creating audio we already have.
   const videosToProcess = videos.filter(({id}) => !existingIds.has(id))
   const totalVideoCount = videosToProcess.length
 
-  const promiseFxns = videosToProcess.map(({title, id, url}, i) => {
-    const counter = `(${i + 1} of ${totalVideoCount})`
+  const promiseFxns = videosToProcess.map(
+    ({title, url, lengthInSeconds}, i) => {
+      const counter = `(${i + 1} of ${totalVideoCount})`
 
-    return () => {
-      console.log(`${counter} Downloading ${title}...`)
+      return () => {
+        if (lengthInSeconds > maxLengthInSeconds) {
+          console.log(`⏭️ Skipping ${title}`)
+          console.log(
+            `⏭️ ${lengthInSeconds} is too long (max ${maxLengthInSeconds})`
+          )
+          return Promise.resolve()
+        }
 
-      return downloadVideo(url)
-        .then(() => {
-          console.log(`${counter} ✅ Success!`)
-        })
-        .catch(() => {
-          console.log(`${counter} ❌ Failed to download`)
-        })
+        console.log(`${counter} Downloading ${title}...`)
+
+        return downloadVideo(url)
+          .then(() => {
+            console.log(`${counter} ✅ Success!`)
+          })
+          .catch(() => {
+            console.log(`${counter} ❌ Failed to download`)
+          })
+      }
     }
-  })
+  )
 
   return promiseFxns.reduce((acc, fxn) => {
     return acc.then(fxn)
