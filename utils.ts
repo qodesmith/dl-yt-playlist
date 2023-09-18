@@ -150,34 +150,31 @@ export async function downloadAllVideos({
   maxLengthInSeconds: number
 }) {
   // Avoid fetching and creating audio we already have.
-  const videosToProcess = videos.filter(({id}) => !existingIds.has(id))
+  const videosToProcess = videos.filter(({id, lengthInSeconds}) => {
+    return !existingIds.has(id) && lengthInSeconds <= maxLengthInSeconds
+  })
   const totalVideoCount = videosToProcess.length
 
-  const promiseFxns = videosToProcess.map(
-    ({title, url, lengthInSeconds}, i) => {
-      const counter = `(${i + 1} of ${totalVideoCount})`
+  if (!totalVideoCount) {
+    console.log('😎 All beats already accounted for')
+    return
+  }
 
-      return () => {
-        if (lengthInSeconds > maxLengthInSeconds) {
-          console.log(`⏭️ Skipping ${title}`)
-          console.log(
-            `⏭️ ${lengthInSeconds} is too long (max ${maxLengthInSeconds})`
-          )
-          return Promise.resolve()
-        }
+  const promiseFxns = videosToProcess.map(({title, url}, i) => {
+    const counter = `(${i + 1} of ${totalVideoCount})`
 
-        console.log(`${counter} Downloading ${title}...`)
+    return () => {
+      console.log(`${counter} Downloading ${title}...`)
 
-        return downloadVideo(url)
-          .then(() => {
-            console.log(`${counter} ✅ Success!`)
-          })
-          .catch(() => {
-            console.log(`${counter} ❌ Failed to download`)
-          })
-      }
+      return downloadVideo(url)
+        .then(() => {
+          console.log(`${counter} ✅ Success!`)
+        })
+        .catch(() => {
+          console.log(`${counter} ❌ Failed to download`)
+        })
     }
-  )
+  })
 
   return promiseFxns.reduce((acc, fxn) => {
     return acc.then(fxn)
