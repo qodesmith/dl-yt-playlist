@@ -2,33 +2,41 @@ import type {youtube_v3} from '@googleapis/youtube'
 import type {GaxiosResponse} from 'googleapis-common'
 
 // https://googleapis.dev/nodejs/googleapis/latest/youtube/classes/Youtube.html
-import * as google from '@googleapis/youtube'
-import {getUnavailableVideos, getVideoIdsFromPlaylistResponse} from './utils'
+import google from '@googleapis/youtube'
+import {
+  getUnavailableVideoPlaylistItemIds,
+  getVideoIdsFromPlaylistResponse,
+} from './utils'
 
 const yt = google.youtube({version: 'v3', auth: process.env.API_KEY})
 
-export type ResponseData = {
-  playlistResponse: GaxiosResponse<youtube_v3.Schema$PlaylistItemListResponse>
-  videosResponse: GaxiosResponse<youtube_v3.Schema$VideoListResponse>
-}
-
-type GenResponseDataArg = {
+type SinglePageDataInput = {
   playlistId: string
   pageToken?: string
   maxResults?: number
 }
 
+export type PageData = {
+  playlistResponse: GaxiosResponse<youtube_v3.Schema$PlaylistItemListResponse>
+  videosResponse: GaxiosResponse<youtube_v3.Schema$VideoListResponse>
+  unavailableItemIds: string[]
+}
+
 /**
- * Calls the YouTube API to get a playlists items, `maxResults` items at a time,
- * then calls a different endpoint to get metadata for each of those videos.
+ * - Fetches a single page of playlist items from a YouTube playlist.
+ * - Fetches video metadata for each list item.
+ * - Calculates which videos are no longer available.
  *
- * Returns a single object containing responses for the playlist and videos.
+ * Returns an object containing:
+ * ```javascript
+ * {playlistResponse, videosResponse, unavailableItemIds}
+ * ```
  */
-export async function genResponseData({
+async function genSinglePageData({
   playlistId,
   pageToken,
   maxResults = 50,
-}: GenResponseDataArg): Promise<ResponseData> {
+}: SinglePageDataInput): Promise<PageData> {
   // https://developers.google.com/youtube/v3/docs/playlistItems/list
   const playlistResponse = await yt.playlistItems.list({
     // Required params.
@@ -57,38 +65,44 @@ export async function genResponseData({
     maxResults,
   })
 
-  const responseData = {playlistResponse, videosResponse}
-  getUnavailableVideos(responseData)
+  const unavailableItemIds = getUnavailableVideoPlaylistItemIds({
+    playlistResponse,
+    videosResponse,
+  })
 
-  return responseData
+  return {playlistResponse, videosResponse, unavailableItemIds}
 }
 
-type GenFullResponseDataArg = {
-  playlistId: string
-  pageToken?: string
-  maxResults: number
-  data: ResponseData[]
+type FullPageDataInput = SinglePageDataInput & {
+  data: PageData[]
 }
 
 /**
- * Will fetch metadata for all videos in a YouTube playlist.
+ * - Fetches all pages of playlist items from a YouTube playlist.
+ * - Calls `genSinglePageData` recursively to do so.
  *
- * Returns an array of playlist and video API responses.
+ * Returns an array of resolved calls to `genSinglePageData`
  */
-export async function genFullResponseData({
+export async function genFullData({
   data,
-  ...genResponseArg
-}: GenFullResponseDataArg): Promise<ResponseData[]> {
+  playlistId,
+  pageToken,
+  maxResults = 50,
+}: FullPageDataInput) {
   // Initiate a single request.
-  const responseData = await genResponseData(genResponseArg)
+  const fullData = await genSinglePageData({
+    playlistId,
+    pageToken,
+    maxResults,
+  })
 
   // Mutate the provided array by pushing the response.
-  data.push(responseData)
+  data.push(fullData)
 
   // Recursively fetch further responses.
-  const {nextPageToken: pageToken} = responseData.playlistResponse.data
-  if (pageToken) {
-    return genFullResponseData({data, ...genResponseArg, pageToken})
+  const {nextPageToken} = fullData.playlistResponse.data
+  if (nextPageToken) {
+    return genFullData({data, playlistId, pageToken: nextPageToken, maxResults})
   }
 
   return data

@@ -1,5 +1,5 @@
 import {youtube_v3} from '@googleapis/youtube'
-import {ResponseData} from './youtubeApiCalls'
+import {PageData} from './youtubeApiCalls'
 
 /**
  * Returns an array of video ids given a response from the playlist endpoint.
@@ -20,10 +20,15 @@ export function getVideoIdsFromPlaylistResponse(playlistResponse: {
   })
 }
 
+type GetUnavailableVideoPlaylistItemIdsInput = Pick<
+  PageData,
+  'playlistResponse' | 'videosResponse'
+>
+
 export function getUnavailableVideoPlaylistItemIds({
   playlistResponse,
   videosResponse,
-}: ResponseData): string[] | undefined {
+}: GetUnavailableVideoPlaylistItemIdsInput): string[] {
   const playlistItems = playlistResponse.data.items ?? []
   const videoItems = videosResponse.data.items ?? []
   const videoIdSet = new Set(videoItems.map(({id}) => id))
@@ -31,12 +36,10 @@ export function getUnavailableVideoPlaylistItemIds({
     ({contentDetails}) => !videoIdSet.has(contentDetails?.videoId)
   )
 
-  if (missingPlaylistVideos.length) {
-    return missingPlaylistVideos.reduce((acc: string[], {id}) => {
-      if (id) acc.push(id)
-      return acc
-    }, [])
-  }
+  return missingPlaylistVideos.reduce((acc: string[], {id}) => {
+    if (id) acc.push(id)
+    return acc
+  }, [])
 }
 
 type Video = {
@@ -57,31 +60,29 @@ type Video = {
  * - date - `item.snippet.publishedAt`
  * - ❌ audio bitrate - not available to non-video owners
  */
-export function getVideoDataFromResponse(response: {
-  data: youtube_v3.Schema$VideoListResponse
-}): Video[] {
-  return (response.data.items ?? []).reduce((acc: Video[], item) => {
-    const {id} = item
-    const {channelTitle: channel, title, publishedAt} = item.snippet ?? {}
-    const url = `https://www.youtube.com/watch?v=${id}`
-    const lengthInSeconds = parseISO8601Duration(item.contentDetails?.duration)
+export function getVideoMetadata(pageDataArr: PageData[]): Video[] {
+  return pageDataArr.reduce((acc: Video[], {videosResponse}) => {
+    videosResponse.data.items?.forEach(item => {
+      const {id} = item
+      const {channelTitle: channel, title, publishedAt} = item.snippet ?? {}
+      const url = `https://www.youtube.com/watch?v=${id}`
+      const lengthInSeconds = parseISO8601Duration(
+        item.contentDetails?.duration
+      )
 
-    if (lengthInSeconds !== null && lengthInSeconds > 60 * 6) {
-      console.log('LONG VIDEO:', {
-        id,
-        title,
-        channel,
-        publishedAt,
-        url,
-        lengthInSeconds,
-      })
-    }
+      if (
+        !id ||
+        !title ||
+        !channel ||
+        !publishedAt ||
+        lengthInSeconds === null
+      ) {
+        throw new Error('Property missing from video')
+      }
 
-    if (!id || !title || !channel || !publishedAt || lengthInSeconds === null) {
-      throw new Error('Property missing from video')
-    }
+      acc.push({id, title, channel, publishedAt, url, lengthInSeconds})
+    })
 
-    acc.push({id, title, channel, publishedAt, url, lengthInSeconds})
     return acc
   }, [])
 }
