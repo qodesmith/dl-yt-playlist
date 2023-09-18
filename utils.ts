@@ -60,8 +60,8 @@ type Video = {
  * - date - `item.snippet.publishedAt`
  * - ❌ audio bitrate - not available to non-video owners
  */
-export function getVideoMetadata(pageDataArr: PageData[]): Video[] {
-  return pageDataArr.reduce((acc: Video[], {videosResponse}) => {
+export function getVideoMetadata(allPages: PageData[]): Video[] {
+  return allPages.reduce((acc: Video[], {videosResponse}) => {
     videosResponse.data.items?.forEach(item => {
       const {id} = item
       const {channelTitle: channel, title, publishedAt} = item.snippet ?? {}
