@@ -1,5 +1,7 @@
 import {youtube_v3} from '@googleapis/youtube'
-import {PageData} from './youtubeApiCalls'
+import {exec} from 'child_process'
+import fs from 'node:fs'
+import type {PageData} from './youtubeApiCalls'
 
 /**
  * Returns an array of video ids given a response from the playlist endpoint.
@@ -42,7 +44,7 @@ export function getUnavailableVideoPlaylistItemIds({
   }, [])
 }
 
-type Video = {
+export type Video = {
   id: string
   title: string
   channel: string
@@ -110,4 +112,79 @@ function parseISO8601Duration(durationString: string | undefined | null) {
     seconds
 
   return totalSeconds
+}
+
+/**
+ * Download a YouTube video as an mp3 file using the `yt-dlp` command line
+ * package. You can conveniently install it with `brew install yt-dlp`.
+ */
+function downloadVideo(videoUrl: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    /**
+     * https://github.com/yt-dlp/yt-dlp#output-template
+     * This is Python syntax and the trailing 's' after the parenthesis
+     * indicates the preceding value is a string.
+     *
+     * https://www.perplexity.ai/search/fb927e12-6b12-4fac-b33d-363c760661ca?s=u
+     * Prefer `title` over `fulltitle`
+     */
+    const template = `-o './data/audio/%(title)s [%(id)s].%(ext)s'`
+
+    // https://github.com/yt-dlp/yt-dlp
+    const command = `yt-dlp ${template} --extract-audio --audio-format mp3 --audio-quality 0 -- ${videoUrl}`
+    exec(command, error => (error ? reject(error) : resolve()))
+  })
+}
+
+/**
+ * Download all YouTube videos as mp3 files using the `yt-dlp` command line
+ * package.
+ */
+export async function downloadAllVideos(
+  videos: Video[],
+  existingIds: Set<string>
+) {
+  // Avoid fetching and creating audio we already have.
+  const videosToProcess = videos.filter(({id}) => !existingIds.has(id))
+  const totalVideoCount = videosToProcess.length
+
+  const promiseFxns = videosToProcess.map(({title, id, url}, i) => {
+    const counter = `(${i + 1} of ${totalVideoCount})`
+
+    return () => {
+      console.log(`${counter} Downloading ${title}...`)
+
+      return downloadVideo(url)
+        .then(() => {
+          console.log(`${counter} ✅ Success!`)
+        })
+        .catch(() => {
+          console.log(`${counter} ❌ Failed to download`)
+        })
+    }
+  })
+
+  return promiseFxns.reduce((acc, fxn) => {
+    return acc.then(fxn)
+  }, Promise.resolve())
+}
+
+/**
+ * Reads the './data/audio' folder, iterates through all the files, and pulls
+ * out the YouTube id from each file. Returns a set of the ids.
+ *
+ * File format is: `<title> [<id>].mp3`
+ */
+export function getExistingAudioIds(): Set<string> {
+  const existingFileNames = fs.readdirSync('./data/audio')
+
+  return existingFileNames.reduce((acc, fileName) => {
+    if (!fileName.endsWith('.mp3')) return acc
+
+    // 'Video Title [123].mp3' => '123
+    const id = fileName.split(' ').pop()?.split('.')[0].slice(1, -1)
+    if (id) acc.add(id)
+
+    return acc
+  }, new Set<string>())
 }
