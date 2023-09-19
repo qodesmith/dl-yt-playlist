@@ -173,7 +173,7 @@ export async function downloadAllVideos({
   const totalVideoCount = videosToProcess.length
 
   if (!totalVideoCount) {
-    console.log('😎 All beats already accounted for')
+    console.log('😎 All videos already accounted for')
     return
   }
 

@@ -13,23 +13,42 @@
 
 import fs from 'node:fs'
 import {genFullData} from './youtubeApiCalls'
-import {getVideoMetadata} from './utils'
+import {downloadAllVideos, getExistingAudioIds, getVideoMetadata} from './utils'
 
 const {PLAYLIST_ID} = process.env
 if (!PLAYLIST_ID) throw new Error('Missing PLAYLIST_ID env variable.')
 
+console.log('💻 Fetching playlist data from the YouTube API...')
+const start = performance.now()
+
+// Make the call to the YouTube API getting metadata for every video.
 const fullData = await genFullData({
   data: [],
   playlistId: PLAYLIST_ID,
   maxResults: 50,
 })
 
+const totalTime = ((performance.now() - start) / 1000).toFixed()
+console.log(`✅ Fetch completed in ${totalTime} seconds!\n`)
+
+// Create the needed directories to store the data.
 if (!fs.existsSync('data')) fs.mkdirSync('data')
+if (!fs.existsSync('data/audio')) fs.mkdirSync('data/audio')
+
+/**
+ * Save all the responses from the YouTube API to a file so we can inspect it if
+ * we need to.
+ */
 Bun.write(
   `./data/${PLAYLIST_ID}_responses.json`,
   JSON.stringify(fullData, null, 2)
 )
-Bun.write(
-  `./data/${PLAYLIST_ID}_videos.json`,
-  JSON.stringify(getVideoMetadata(fullData), null, 2)
-)
+
+// Create an array of objects containing the metadata we want on the videos.
+const videos = getVideoMetadata(fullData)
+
+// Write the video metadata to a new file.
+Bun.write(`./data/${PLAYLIST_ID}_videos.json`, JSON.stringify(videos, null, 2))
+
+const existingIds = getExistingAudioIds()
+await downloadAllVideos({videos, existingIds, maxLengthInSeconds: 60 * 11})
