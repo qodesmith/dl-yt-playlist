@@ -135,7 +135,15 @@ function parseISO8601Duration(durationString: string | undefined | null) {
  * Download a YouTube video as an mp3 file using the `yt-dlp` command line
  * package. You can conveniently install it with `brew install yt-dlp`.
  */
-function downloadVideo(videoUrl: string): Promise<void> {
+function downloadVideo({
+  videoUrl,
+  playlistName,
+  audioOnly,
+}: {
+  videoUrl: string
+  playlistName: string
+  audioOnly: boolean | undefined
+}): Promise<void> {
   return new Promise((resolve, reject) => {
     /**
      * https://github.com/yt-dlp/yt-dlp#output-template
@@ -145,10 +153,14 @@ function downloadVideo(videoUrl: string): Promise<void> {
      * https://www.perplexity.ai/search/fb927e12-6b12-4fac-b33d-363c760661ca?s=u
      * Prefer `title` over `fulltitle`
      */
-    const template = `-o './data/audio/%(title)s [%(id)s].%(ext)s'`
+    const subFolder = audioOnly ? 'audio' : 'video'
+    const template = `-o './data/${playlistName}/${subFolder}/%(title)s [%(id)s].%(ext)s'`
+    const audioTemplate = audioOnly
+      ? '--extract-audio --audio-format mp3 --audio-quality 0'
+      : ''
 
     // https://github.com/yt-dlp/yt-dlp
-    const command = `yt-dlp ${template} --extract-audio --audio-format mp3 --audio-quality 0 -- ${videoUrl}`
+    const command = `yt-dlp ${template} ${audioTemplate} -- ${videoUrl}`
     exec(command, error => (error ? reject(error) : resolve()))
   })
 }
@@ -161,10 +173,14 @@ export async function downloadAllVideos({
   videos,
   existingIds,
   maxLengthInSeconds,
+  playlistName,
+  audioOnly,
 }: {
   videos: Video[]
   existingIds: Set<string>
   maxLengthInSeconds: number
+  playlistName: string
+  audioOnly: boolean
 }) {
   // Avoid fetching and creating audio we already have.
   const videosToProcess = videos.filter(({id, lengthInSeconds}) => {
@@ -183,7 +199,7 @@ export async function downloadAllVideos({
     return () => {
       console.log(`${counter} Downloading ${title}...`)
 
-      return downloadVideo(url)
+      return downloadVideo({videoUrl: url, playlistName, audioOnly})
         .then(() => {
           console.log(`${counter} ✅ Success!`)
         })
@@ -204,14 +220,42 @@ export async function downloadAllVideos({
  *
  * File format is: `<title> [<id>].mp3`
  */
-export function getExistingAudioIds(): Set<string> {
-  const existingFileNames = fs.readdirSync('./data/audio')
+export function getExistingVideoIds({
+  playlistName,
+  audioOnly,
+}: {
+  playlistName: string
+  audioOnly: boolean
+}): Set<string> {
+  const subFolder = audioOnly ? 'audio' : 'video'
+  const existingFileNames = fs.readdirSync(
+    `./data/${playlistName}/${subFolder}`
+  )
 
   return existingFileNames.reduce((acc, fileName) => {
-    if (!fileName.endsWith('.mp3')) return acc
+    /**
+     * This regex pattern matches a square bracket followed by one or more
+     * alphanumeric characters or the special characters `-` and `_`, followed
+     * by a closing square bracket. The .\w+$ part matches the file extension
+     * and ensures that the match is at the end of the file name.
+     *
+     * Here's a step-by-step explanation of the regex pattern:
+     * 1. `\[` - Matches a literal opening square bracket
+     * 2. `(` - Starts a capturing group
+     * 3. `[a-zA-Z0-9_-]` - Matches any alphanumeric character or the special characters `-` and `_`
+     * 4. `+` - Matches one or more of the preceding characters
+     * 5. `)` - Ends the capturing group
+     * 6. `\]` - Matches a literal closing square bracket
+     * 7. `\.` - Matches a literal dot
+     * 8. `\w+` - Matches one or more word characters (i.e., the file extension)
+     * 9. `$` - Matches the end of the string
+     *
+     * Thanks to perplexity.ai for generating this regex!
+     */
+    const regex = /\[([a-zA-Z0-9_-]+)\]\.\w+$/
 
-    // 'Video Title [123].mp3' => '123
-    const id = fileName.split(' ').pop()?.split('.')[0].slice(1, -1)
+    // 'Video Title [123-_abc123].mp3' => '123-_abc123'
+    const id = fileName.match(regex)?.[1]
     if (id) acc.add(id)
 
     return acc

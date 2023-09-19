@@ -12,11 +12,14 @@
  */
 
 import fs from 'node:fs'
-import {genFullData} from './youtubeApiCalls'
-import {downloadAllVideos, getExistingAudioIds, getVideoMetadata} from './utils'
+import {genFullData, genPlaylistName} from './youtubeApiCalls'
+import {downloadAllVideos, getExistingVideoIds, getVideoMetadata} from './utils'
 
+const audioOnly = Bun.argv.includes('--audioOnly')
 const {PLAYLIST_ID} = process.env
 if (!PLAYLIST_ID) throw new Error('Missing PLAYLIST_ID env variable.')
+
+const playlistName = await genPlaylistName(PLAYLIST_ID)
 
 console.log('💻 Fetching playlist data from the YouTube API...')
 const start = performance.now()
@@ -32,15 +35,22 @@ const totalTime = ((performance.now() - start) / 1000).toFixed()
 console.log(`✅ Fetch completed in ${totalTime} seconds!\n`)
 
 // Create the needed directories to store the data.
-if (!fs.existsSync('data')) fs.mkdirSync('data')
-if (!fs.existsSync('data/audio')) fs.mkdirSync('data/audio')
+const subFolder = audioOnly ? 'audio' : 'video'
+const directories = [
+  'data',
+  `data/${playlistName}`,
+  `data/${playlistName}/${subFolder}`,
+]
+directories.forEach(dir => {
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir)
+})
 
 /**
  * Save all the responses from the YouTube API to a file so we can inspect it if
  * we need to.
  */
 Bun.write(
-  `./data/${PLAYLIST_ID}_responses.json`,
+  `./data/${playlistName}/responses.json`,
   JSON.stringify(fullData, null, 2)
 )
 
@@ -48,7 +58,16 @@ Bun.write(
 const videos = getVideoMetadata(fullData)
 
 // Write the video metadata to a new file.
-Bun.write(`./data/${PLAYLIST_ID}_videos.json`, JSON.stringify(videos, null, 2))
+Bun.write(
+  `./data/${playlistName}/videoMetadata.json`,
+  JSON.stringify(videos, null, 2)
+)
 
-const existingIds = getExistingAudioIds()
-await downloadAllVideos({videos, existingIds, maxLengthInSeconds: 60 * 11})
+const existingIds = getExistingVideoIds({playlistName, audioOnly})
+await downloadAllVideos({
+  videos,
+  existingIds,
+  maxLengthInSeconds: 60 * 11,
+  playlistName,
+  audioOnly,
+})

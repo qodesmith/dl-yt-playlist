@@ -22,6 +22,18 @@ export type PageData = {
   unavailableItemIds: string[]
 }
 
+export async function genPlaylistName(playlistId: string) {
+  const response = await yt.playlists.list({
+    id: [playlistId],
+    part: ['snippet'],
+  })
+
+  const playlistName = response.data?.items?.[0].snippet?.title
+  if (!playlistName) throw new Error('Failed to fetch playlist name')
+
+  return playlistName
+}
+
 /**
  * - Fetches a single page of playlist items from a YouTube playlist.
  * - Fetches video metadata for each list item.
