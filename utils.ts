@@ -48,7 +48,7 @@ export type Video = {
   id: string
   title: string
   channel: string
-  publishedAt: string
+  dateAddedToPlaylist: string
   url: string
   lengthInSeconds: number
 }
@@ -63,30 +63,47 @@ export type Video = {
  * - ❌ audio bitrate - not available to non-video owners
  */
 export function getVideoMetadata(allPages: PageData[]): Video[] {
-  return allPages.reduce((acc: Video[], {videosResponse}) => {
-    videosResponse.data.items?.forEach(item => {
-      const {id} = item
-      const {channelTitle: channel, title, publishedAt} = item.snippet ?? {}
-      const url = `https://www.youtube.com/watch?v=${id}`
-      const lengthInSeconds = parseISO8601Duration(
-        item.contentDetails?.duration
-      )
+  return allPages
+    .reduce((acc: Video[], {videosResponse}) => {
+      videosResponse.data.items?.forEach(item => {
+        const {id} = item
+        const {
+          channelTitle: channel,
+          title,
+          publishedAt: dateAddedToPlaylist,
+        } = item.snippet ?? {}
+        const url = `https://www.youtube.com/watch?v=${id}`
+        const lengthInSeconds = parseISO8601Duration(
+          item.contentDetails?.duration
+        )
 
-      if (
-        !id ||
-        !title ||
-        !channel ||
-        !publishedAt ||
-        lengthInSeconds === null
-      ) {
-        throw new Error('Property missing from video')
-      }
+        if (
+          !id ||
+          !title ||
+          !channel ||
+          !dateAddedToPlaylist ||
+          lengthInSeconds === null
+        ) {
+          throw new Error('Property missing from video')
+        }
 
-      acc.push({id, title, channel, publishedAt, url, lengthInSeconds})
+        acc.push({
+          id,
+          title,
+          channel,
+          dateAddedToPlaylist,
+          url,
+          lengthInSeconds,
+        })
+      })
+
+      return acc
+    }, [])
+    .sort((a, b) => {
+      if (a.dateAddedToPlaylist < b.dateAddedToPlaylist) return 1
+      if (a.dateAddedToPlaylist > b.dateAddedToPlaylist) return -1
+      return 0
     })
-
-    return acc
-  }, [])
 }
 
 function parseISO8601Duration(durationString: string | undefined | null) {
