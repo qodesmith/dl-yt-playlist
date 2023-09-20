@@ -2,6 +2,10 @@
   "name": "youtube-playlist-videos-metadata",
   "module": "main.ts",
   "type": "module",
+  "scripts": {
+    "start": "bun main.ts",
+    "audio": "bun main.ts --audioOnly"
+  },
   "dependencies": {
     "@googleapis/youtube": "^11.0.1"
   },
