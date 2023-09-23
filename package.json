@@ -3,6 +3,7 @@
   "module": "./build/main.js",
   "main": "./build/main.js",
   "type": "module",
+  "types": "./build/main.d.ts",
   "version": "1.0.0",
   "publishConfig": {
     "access": "public"
@@ -10,7 +11,7 @@
   "scripts": {
     "audio": "bun downloadYoutubePlaylist.ts --audioOnly",
     "video": "bun downloadYoutubePlaylist.ts",
-    "build": "bun build ./src/main.ts --target bun --outfile ./build/main.js --external @googleapis/youtube"
+    "build": "bun build.ts"
   },
   "description": "Download all YouTube videos (or audio only) from every video in a playlist!",
   "repository": {
@@ -33,6 +34,7 @@
   },
   "devDependencies": {
     "@types/minimist": "^1.2.2",
+    "bun-plugin-dts": "^0.2.1",
     "bun-types": "latest"
   },
   "peerDependencies": {

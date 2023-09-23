@@ -1,5 +1,5 @@
 node_modules
 data
-build
+dist
 .env
 .DS_Store
