@@ -9,6 +9,22 @@
     "video": "bun downloadYoutubePlaylist.ts",
     "build": "bun build ./src/main.ts --target bun --outfile ./build/main.js"
   },
+  "description": "Download all YouTube videos (or audio only) from every video in a playlist!",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/qodesmith/download-youtube-playlist.git"
+  },
+  "keywords": [
+    "download",
+    "youtube",
+    "playlist"
+  ],
+  "author": "Qodesmith",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/qodesmith/download-youtube-playlist/issues"
+  },
+  "homepage": "https://github.com/qodesmith/download-youtube-playlist#readme",
   "dependencies": {
     "@googleapis/youtube": "^11.0.1",
     "minimist": "^1.2.8"
