@@ -14,8 +14,9 @@
 import fs from 'node:fs'
 import {genFullData, genPlaylistName} from './youtubeApiCalls'
 import {downloadAllVideos, getExistingVideoIds, getVideoMetadata} from './utils'
+import minimist from 'minimist'
 
-const audioOnly = Bun.argv.includes('--audioOnly')
+const audioOnly = minimist(Bun.argv, {boolean: ['audioOnly']}).audioOnly
 const {PLAYLIST_ID} = process.env
 if (!PLAYLIST_ID) throw new Error('Missing PLAYLIST_ID env variable.')
 

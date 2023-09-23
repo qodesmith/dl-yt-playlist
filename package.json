@@ -7,9 +7,11 @@
     "audio": "bun main.ts --audioOnly"
   },
   "dependencies": {
-    "@googleapis/youtube": "^11.0.1"
+    "@googleapis/youtube": "^11.0.1",
+    "minimist": "^1.2.8"
   },
   "devDependencies": {
+    "@types/minimist": "^1.2.2",
     "bun-types": "latest"
   },
   "peerDependencies": {
