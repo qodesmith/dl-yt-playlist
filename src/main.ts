@@ -14,17 +14,25 @@
 import fs from 'node:fs'
 import {genData, genPlaylistName} from './youtubeApiCalls'
 import {downloadAllVideos, getExistingVideoIds, getVideoMetadata} from './utils'
+// https://googleapis.dev/nodejs/googleapis/latest/youtube/classes/Youtube.html
+import google from '@googleapis/youtube'
 
+/**
+ * Download all the videos (or audio only) in a YouTube playlist!
+ */
 export default async function downloadYouTubePlaylist({
   playlistId,
   audioOnly,
+  apiKey,
   getFullData,
 }: {
   playlistId: string
   audioOnly: boolean
+  apiKey: string
   getFullData?: boolean
 }) {
-  const playlistName = await genPlaylistName(playlistId)
+  const yt = google.youtube({version: 'v3', auth: apiKey})
+  const playlistName = await genPlaylistName({playlistId, yt})
   console.log('💻 Fetching playlist data from the YouTube API...')
   const start = performance.now()
 
@@ -40,6 +48,7 @@ export default async function downloadYouTubePlaylist({
     maxResults: 50,
     incrementFetchCount,
     getFullData: !!getFullData,
+    yt,
   })
 
   const totalTime = ((performance.now() - start) / 1000).toFixed(2)

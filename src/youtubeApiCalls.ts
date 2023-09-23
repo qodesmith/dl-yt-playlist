@@ -1,20 +1,17 @@
 import type {youtube_v3} from '@googleapis/youtube'
 import type {GaxiosResponse} from 'googleapis-common'
 
-// https://googleapis.dev/nodejs/googleapis/latest/youtube/classes/Youtube.html
-import google from '@googleapis/youtube'
 import {
   getUnavailableVideoPlaylistItemIds,
   getVideoIdsFromPlaylistResponse,
 } from './utils'
-
-const yt = google.youtube({version: 'v3', auth: process.env.API_KEY})
 
 type SinglePageDataInput = {
   playlistId: string
   pageToken?: string
   maxResults?: number
   incrementFetchCount: (num: number) => void
+  yt: youtube_v3.Youtube
 }
 
 export type PageData = {
@@ -23,7 +20,13 @@ export type PageData = {
   unavailableItemIds: string[]
 }
 
-export async function genPlaylistName(playlistId: string) {
+export async function genPlaylistName({
+  playlistId,
+  yt,
+}: {
+  playlistId: string
+  yt: youtube_v3.Youtube
+}) {
   const response = await yt.playlists.list({
     id: [playlistId],
     part: ['snippet'],
@@ -49,6 +52,7 @@ async function genSinglePageData({
   playlistId,
   pageToken,
   incrementFetchCount,
+  yt,
   maxResults = 50,
 }: SinglePageDataInput): Promise<PageData> {
   // https://developers.google.com/youtube/v3/docs/playlistItems/list
@@ -93,6 +97,7 @@ type PageDataInput = SinglePageDataInput & {
   data: PageData[]
   incrementFetchCount: (nun: number) => void
   getFullData: boolean
+  yt: youtube_v3.Youtube
 }
 
 /**
@@ -107,6 +112,7 @@ export async function genData({
   pageToken,
   incrementFetchCount,
   getFullData,
+  yt,
   maxResults = 50,
 }: PageDataInput) {
   // Initiate a single request.
@@ -115,6 +121,7 @@ export async function genData({
     pageToken,
     maxResults,
     incrementFetchCount,
+    yt,
   })
 
   // Mutate the provided array by pushing the response.
@@ -130,6 +137,7 @@ export async function genData({
       maxResults,
       incrementFetchCount,
       getFullData,
+      yt,
     })
   }
 
