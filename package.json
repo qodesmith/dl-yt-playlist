@@ -1,5 +1,5 @@
 {
-  "name": "@qodestack/download-youtube-playlist",
+  "name": "@qodestack/dl-yt-playlist",
   "module": "./build/main.js",
   "main": "./build/main.js",
   "type": "module",
@@ -15,7 +15,7 @@
   "description": "Download all YouTube videos (or audio only) from every video in a playlist!",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/qodesmith/download-youtube-playlist.git"
+    "url": "git+https://github.com/qodesmith/dl-yt-playlist.git"
   },
   "keywords": [
     "download",
@@ -25,9 +25,9 @@
   "author": "Qodesmith",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/qodesmith/download-youtube-playlist/issues"
+    "url": "https://github.com/qodesmith/dl-yt-playlist/issues"
   },
-  "homepage": "https://github.com/qodesmith/download-youtube-playlist#readme",
+  "homepage": "https://github.com/qodesmith/dl-yt-playlist#readme",
   "dependencies": {
     "@googleapis/youtube": "^11.0.1"
   },
