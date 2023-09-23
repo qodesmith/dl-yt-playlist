@@ -12,15 +12,17 @@
  */
 
 import fs from 'node:fs'
-import {genFullData, genPlaylistName} from './youtubeApiCalls'
+import {genData, genPlaylistName} from './youtubeApiCalls'
 import {downloadAllVideos, getExistingVideoIds, getVideoMetadata} from './utils'
 
 export default async function downloadYouTubePlaylist({
   playlistId,
   audioOnly,
+  getFullData,
 }: {
   playlistId: string
   audioOnly: boolean
+  getFullData?: boolean
 }) {
   const playlistName = await genPlaylistName(playlistId)
   console.log('💻 Fetching playlist data from the YouTube API...')
@@ -32,11 +34,12 @@ export default async function downloadYouTubePlaylist({
   }
 
   // Make the call to the YouTube API getting metadata for every video.
-  const fullData = await genFullData({
+  const fullData = await genData({
     data: [],
     playlistId,
     maxResults: 50,
     incrementFetchCount,
+    getFullData: !!getFullData,
   })
 
   const totalTime = ((performance.now() - start) / 1000).toFixed(2)

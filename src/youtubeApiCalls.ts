@@ -89,9 +89,10 @@ async function genSinglePageData({
   return {playlistResponse, videosResponse, unavailableItemIds}
 }
 
-type FullPageDataInput = SinglePageDataInput & {
+type PageDataInput = SinglePageDataInput & {
   data: PageData[]
   incrementFetchCount: (nun: number) => void
+  getFullData: boolean
 }
 
 /**
@@ -100,15 +101,16 @@ type FullPageDataInput = SinglePageDataInput & {
  *
  * Returns an array of resolved calls to `genSinglePageData`
  */
-export async function genFullData({
+export async function genData({
   data,
   playlistId,
   pageToken,
   incrementFetchCount,
+  getFullData,
   maxResults = 50,
-}: FullPageDataInput) {
+}: PageDataInput) {
   // Initiate a single request.
-  const fullData = await genSinglePageData({
+  const pageData = await genSinglePageData({
     playlistId,
     pageToken,
     maxResults,
@@ -116,17 +118,18 @@ export async function genFullData({
   })
 
   // Mutate the provided array by pushing the response.
-  data.push(fullData)
+  data.push(pageData)
 
   // Recursively fetch further responses.
-  const {nextPageToken} = fullData.playlistResponse.data
-  if (nextPageToken) {
-    return genFullData({
+  const {nextPageToken} = pageData.playlistResponse.data
+  if (getFullData && nextPageToken) {
+    return genData({
       data,
       playlistId,
       pageToken: nextPageToken,
       maxResults,
       incrementFetchCount,
+      getFullData,
     })
   }
 
