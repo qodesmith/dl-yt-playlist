@@ -36,3 +36,7 @@ data
     responses.json
     videoMetadata.json
 ```
+
+## TODOs
+
+[ ] Implement "initialDownload" which conditionally downloads all YT metadata otherwise only makes a single call for the 1st 50 entries

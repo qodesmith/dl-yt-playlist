@@ -1,10 +1,13 @@
 {
   "name": "youtube-playlist-videos-metadata",
-  "module": "main.ts",
+  "module": "./build/main.js",
+  "main": "./build/main.js",
   "type": "module",
+  "version": "1.0.0",
   "scripts": {
-    "start": "bun main.ts",
-    "audio": "bun main.ts --audioOnly"
+    "audio": "bun downloadYoutubePlaylist.ts --audioOnly",
+    "video": "bun downloadYoutubePlaylist.ts",
+    "build": "bun build ./src/main.ts --target bun --outfile ./build/main.js"
   },
   "dependencies": {
     "@googleapis/youtube": "^11.0.1",
