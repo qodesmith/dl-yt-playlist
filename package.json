@@ -1,5 +1,5 @@
 {
-  "name": "download-youtube-playlist",
+  "name": "@qodesmith/download-youtube-playlist",
   "module": "./build/main.js",
   "main": "./build/main.js",
   "type": "module",
