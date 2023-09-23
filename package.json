@@ -1,9 +1,12 @@
 {
-  "name": "@qodesmith/download-youtube-playlist",
+  "name": "@qodestack/download-youtube-playlist",
   "module": "./build/main.js",
   "main": "./build/main.js",
   "type": "module",
   "version": "1.0.0",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "audio": "bun downloadYoutubePlaylist.ts --audioOnly",
     "video": "bun downloadYoutubePlaylist.ts",
