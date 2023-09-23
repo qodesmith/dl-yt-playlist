@@ -14,6 +14,7 @@ type SinglePageDataInput = {
   playlistId: string
   pageToken?: string
   maxResults?: number
+  incrementFetchCount: (num: number) => void
 }
 
 export type PageData = {
@@ -47,6 +48,7 @@ export async function genPlaylistName(playlistId: string) {
 async function genSinglePageData({
   playlistId,
   pageToken,
+  incrementFetchCount,
   maxResults = 50,
 }: SinglePageDataInput): Promise<PageData> {
   // https://developers.google.com/youtube/v3/docs/playlistItems/list
@@ -77,6 +79,8 @@ async function genSinglePageData({
     maxResults,
   })
 
+  incrementFetchCount(2)
+
   const unavailableItemIds = getUnavailableVideoPlaylistItemIds({
     playlistResponse,
     videosResponse,
@@ -87,6 +91,7 @@ async function genSinglePageData({
 
 type FullPageDataInput = SinglePageDataInput & {
   data: PageData[]
+  incrementFetchCount: (nun: number) => void
 }
 
 /**
@@ -99,6 +104,7 @@ export async function genFullData({
   data,
   playlistId,
   pageToken,
+  incrementFetchCount,
   maxResults = 50,
 }: FullPageDataInput) {
   // Initiate a single request.
@@ -106,6 +112,7 @@ export async function genFullData({
     playlistId,
     pageToken,
     maxResults,
+    incrementFetchCount,
   })
 
   // Mutate the provided array by pushing the response.
@@ -114,7 +121,13 @@ export async function genFullData({
   // Recursively fetch further responses.
   const {nextPageToken} = fullData.playlistResponse.data
   if (nextPageToken) {
-    return genFullData({data, playlistId, pageToken: nextPageToken, maxResults})
+    return genFullData({
+      data,
+      playlistId,
+      pageToken: nextPageToken,
+      maxResults,
+      incrementFetchCount,
+    })
   }
 
   return data

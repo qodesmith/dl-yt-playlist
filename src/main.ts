@@ -26,15 +26,23 @@ export default async function downloadYouTubePlaylist({
   console.log('💻 Fetching playlist data from the YouTube API...')
   const start = performance.now()
 
+  let fetchCount = 0
+  const incrementFetchCount = (num: number) => {
+    fetchCount += num
+  }
+
   // Make the call to the YouTube API getting metadata for every video.
   const fullData = await genFullData({
     data: [],
     playlistId,
     maxResults: 50,
+    incrementFetchCount,
   })
 
-  const totalTime = ((performance.now() - start) / 1000).toFixed()
-  console.log(`✅ Fetch completed in ${totalTime} seconds!\n`)
+  const totalTime = ((performance.now() - start) / 1000).toFixed(2)
+  console.log(
+    `✅ ${fetchCount} fetch calls completed in ${totalTime} seconds!\n`
+  )
 
   // Create the needed directories to store the data.
   const subFolder = audioOnly ? 'audio' : 'video'
