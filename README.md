@@ -1,4 +1,4 @@
-# YouTube Playlist Videos Metadata
+# Download YouTube Playlist
 
 Download all YouTube videos (or audio only) from every video in a playlist!
 

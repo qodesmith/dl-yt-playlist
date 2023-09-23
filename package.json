@@ -1,5 +1,5 @@
 {
-  "name": "youtube-playlist-videos-metadata",
+  "name": "download-youtube-playlist",
   "module": "./build/main.js",
   "main": "./build/main.js",
   "type": "module",
