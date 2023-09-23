@@ -1,9 +1,9 @@
 {
   "name": "@qodestack/dl-yt-playlist",
-  "module": "./build/main.js",
-  "main": "./build/main.js",
+  "module": "./dist/main.js",
+  "main": "./dist/main.js",
   "type": "module",
-  "types": "./build/main.d.ts",
+  "types": "./dist/main.d.ts",
   "version": "1.0.1",
   "publishConfig": {
     "access": "public"
