@@ -79,12 +79,6 @@ export default async function downloadYouTubePlaylist({
   // Create an array of objects containing the metadata we want on the videos.
   const videos = getVideoMetadata(fullData)
 
-  // Write the video metadata to a new file.
-  Bun.write(
-    `./data/${playlistName}/videoMetadata.json`,
-    JSON.stringify(videos, null, 2)
-  )
-
   const existingIds = getExistingVideoIds({playlistName, audioOnly})
 
   await downloadAllVideos({
@@ -94,4 +88,10 @@ export default async function downloadYouTubePlaylist({
     playlistName,
     audioOnly,
   })
+
+  // Write the video metadata to a new file.
+  Bun.write(
+    `./data/${playlistName}/videoMetadata.json`,
+    JSON.stringify(videos, null, 2)
+  )
 }
