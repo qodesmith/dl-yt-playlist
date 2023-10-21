@@ -68,10 +68,10 @@ export default async function downloadYouTubePlaylist({
   })
 
   /**
-   * Save all the responses from the YouTube API to a file so we can inspect it if
-   * we need to.
+   * Save all the responses from the YouTube API to a file so we can inspect it
+   * if we need to.
    */
-  Bun.write(
+  await Bun.write(
     `./data/${playlistName}/responses.json`,
     JSON.stringify(fullData, null, 2)
   )
@@ -90,7 +90,7 @@ export default async function downloadYouTubePlaylist({
   })
 
   // Write the video metadata to a new file.
-  Bun.write(
+  await Bun.write(
     `./data/${playlistName}/videoMetadata.json`,
     JSON.stringify(videos, null, 2)
   )
