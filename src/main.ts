@@ -22,13 +22,13 @@ import google from '@googleapis/youtube'
  */
 export default async function downloadYouTubePlaylist({
   playlistId,
-  audioOnly,
   apiKey,
-  getFullData,
+  audioOnly = false,
+  getFullData = false,
 }: {
   playlistId: string
-  audioOnly: boolean
   apiKey: string
+  audioOnly?: boolean
   getFullData?: boolean
 }) {
   const yt = google.youtube({version: 'v3', auth: apiKey})

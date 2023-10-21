@@ -9,4 +9,4 @@ const {audioOnly} = minimist<{audioOnly: boolean}>(Bun.argv, {
   boolean: ['audioOnly'],
 })
 
-downloadYouTubePlaylist({playlistId, audioOnly, apiKey})
+downloadYouTubePlaylist({playlistId, apiKey, audioOnly, getFullData: true})
