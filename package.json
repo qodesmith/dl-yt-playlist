@@ -11,7 +11,8 @@
   "scripts": {
     "audio": "bun downloadYoutubePlaylist.ts --audioOnly",
     "video": "bun downloadYoutubePlaylist.ts",
-    "build": "bun build.ts"
+    "build": "bun build.ts",
+    "publish": "bun run build && npm publish"
   },
   "description": "Download all YouTube videos (or audio only) from every video in a playlist!",
   "repository": {
