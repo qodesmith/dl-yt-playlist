@@ -14,16 +14,20 @@ You'll need a few things to use this project:
 
 Say you have this code in a file named `download.ts`:
 
-```javascript
+```typescript
 import dl from 'dl-yt-playlist'
 
 const {playlistId, apiKey} = process.env
 
 dl({
-  playlistId, // Required - the YouTube playlist id
-  apiKey, // Required - your YouTube Data api key
-  audioOnly: false, // Required - true for audio, false for video
-  getFullData: true, // Optional - false will only get the 1st 50 videos
+  // Required:
+  playlistId: string, // The YouTube playlist id
+  apiKey: string, // Your YouTube Data api key
+
+  // Optional:
+  audioOnly: boolean, // `true` for audio MP3, `false` for video MP4
+  getFullData: boolean, // `false` will only get the 1st 50 videos
+  maxLengthInSeconds: number, // Videos longer than this will be skipped
 })
 ```
 

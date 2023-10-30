@@ -25,11 +25,13 @@ export default async function downloadYouTubePlaylist({
   apiKey,
   audioOnly = false,
   getFullData = false,
+  maxLengthInSeconds = Infinity,
 }: {
   playlistId: string
   apiKey: string
   audioOnly?: boolean
   getFullData?: boolean
+  maxLengthInSeconds?: number
 }) {
   const yt = google.youtube({version: 'v3', auth: apiKey})
   const playlistName = await genPlaylistName({playlistId, yt})
@@ -84,7 +86,7 @@ export default async function downloadYouTubePlaylist({
   await downloadAllVideos({
     videos,
     existingIds,
-    maxLengthInSeconds: 60 * 11,
+    maxLengthInSeconds,
     playlistName,
     audioOnly,
   })

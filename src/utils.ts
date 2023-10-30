@@ -155,12 +155,12 @@ async function downloadVideo({
      */
     const subFolder = audioOnly ? 'audio' : 'video'
     const template = `-o './data/${playlistName}/${subFolder}/%(title)s [%(id)s].%(ext)s'`
-    const audioTemplate = audioOnly
+    const options = audioOnly
       ? '--extract-audio --audio-format mp3 --audio-quality 0'
-      : ''
+      : '-f mp4'
 
     // https://github.com/yt-dlp/yt-dlp
-    const command = `yt-dlp ${template} ${audioTemplate} -- ${videoUrl}`
+    const command = `yt-dlp ${template} ${options} -- ${videoUrl}`
 
     /**
      * Exec doesn't seem to call its callback function when the command is done:
