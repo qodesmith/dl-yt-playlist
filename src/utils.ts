@@ -4,22 +4,32 @@ import fs from 'node:fs'
 import type {PageData} from './youtubeApiCalls'
 
 /**
- * Returns an array of video ids given a response from the playlist endpoint.
+ * Returns an object where the keys are video ids and the values are the dates
+ * those videos were added to the playlist.
  */
-export function getVideoIdsFromPlaylistResponse(playlistResponse: {
+export function getVideoIdsAndDatesAddedFromPlaylistResponse(playlistResponse: {
   data: youtube_v3.Schema$PlaylistItemListResponse
-}): string[] {
+}): Record<string, string> {
   if (!playlistResponse.data.items) {
     throw new Error('Missing playlistResponse.data.items')
   }
 
-  return playlistResponse.data.items.map(({contentDetails}) => {
-    if (!contentDetails?.videoId) {
-      throw new Error('contentDetails or videoId missing from playlist item')
-    }
+  return playlistResponse.data.items.reduce(
+    (acc, {contentDetails, snippet}) => {
+      if (!contentDetails?.videoId) {
+        throw new Error('contentDetails or videoId missing from playlist item')
+      }
 
-    return contentDetails.videoId
-  })
+      if (!snippet?.publishedAt) {
+        throw new Error('snippet or publishedAt missing from playlist item')
+      }
+
+      acc[contentDetails.videoId] = snippet.publishedAt
+
+      return acc
+    },
+    {} as Record<string, string>
+  )
 }
 
 type GetUnavailableVideoPlaylistItemIdsInput = Pick<
@@ -59,19 +69,17 @@ export type Video = {
  * - title - `item.snippet.title`
  * - URL (we can construct this)
  * - length - `item.contentDetails.duration` - the format is IS0 8601 duration
- * - date - `item.snippet.publishedAt`
+ * - date - `playlistMetaData.snippet.publishedAt` - from `videoIdsAndDates`
+ *     NOTE - we do NOT want `item.snippet`, we want playlist metadata for this
  * - ❌ audio bitrate - not available to non-video owners
  */
 export function getVideoMetadata(allPages: PageData[]): Video[] {
   return allPages
-    .reduce((acc: Video[], {videosResponse}) => {
+    .reduce((acc: Video[], {videosResponse, videoIdsAndDates}) => {
       videosResponse.data.items?.forEach(item => {
         const {id} = item
-        const {
-          channelTitle: channel,
-          title,
-          publishedAt: dateAddedToPlaylist,
-        } = item.snippet ?? {}
+        const dateAddedToPlaylist = videoIdsAndDates[id ?? '']
+        const {channelTitle: channel, title} = item.snippet ?? {}
         const url = `https://www.youtube.com/watch?v=${id}`
         const lengthInSeconds = parseISO8601Duration(
           item.contentDetails?.duration
