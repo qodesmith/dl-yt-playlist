@@ -58,20 +58,18 @@ export type Video = {
   id: string
   title: string
   channel: string
+  publishedAt: string
   dateAddedToPlaylist: string
   url: string
   lengthInSeconds: number
 }
 
 /**
- * Metadata we want:
- * - channel - `item.snippet.channelTitle`
- * - title - `item.snippet.title`
- * - URL (we can construct this)
- * - length - `item.contentDetails.duration` - the format is IS0 8601 duration
- * - date - `playlistMetaData.snippet.publishedAt` - from `videoIdsAndDates`
- *     NOTE - we do NOT want `item.snippet`, we want playlist metadata for this
- * - ❌ audio bitrate - not available to non-video owners
+ * Notes about the metadata:
+ * - The audio bitrate is only available to the video owner
+ * - dateAddedToPlaylist - calculated from `playlistMetaData.snippet.publishedAt`
+ * - publishedAt - date the video was published (`item.snippet.publishedAt`)
+ * - lengthInSeconds - `item.contentDetails.duration` - the format is IS0 8601 duration
  */
 export function getVideoMetadata(allPages: PageData[]): Video[] {
   return allPages
@@ -79,7 +77,7 @@ export function getVideoMetadata(allPages: PageData[]): Video[] {
       videosResponse.data.items?.forEach(item => {
         const {id} = item
         const dateAddedToPlaylist = videoIdsAndDates[id ?? '']
-        const {channelTitle: channel, title} = item.snippet ?? {}
+        const {channelTitle: channel, title, publishedAt} = item.snippet ?? {}
         const url = `https://www.youtube.com/watch?v=${id}`
         const lengthInSeconds = parseISO8601Duration(
           item.contentDetails?.duration
@@ -89,6 +87,7 @@ export function getVideoMetadata(allPages: PageData[]): Video[] {
           !id ||
           !title ||
           !channel ||
+          !publishedAt ||
           !dateAddedToPlaylist ||
           lengthInSeconds === null
         ) {
@@ -99,6 +98,7 @@ export function getVideoMetadata(allPages: PageData[]): Video[] {
           id,
           title,
           channel,
+          publishedAt,
           dateAddedToPlaylist,
           url,
           lengthInSeconds,
