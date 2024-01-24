@@ -23,12 +23,14 @@ import google from '@googleapis/youtube'
 export default async function downloadYouTubePlaylist({
   playlistId,
   apiKey,
+  directory,
   audioOnly = false,
   getFullData = false,
   maxLengthInSeconds = Infinity,
 }: {
   playlistId: string
   apiKey: string
+  directory: string
   audioOnly?: boolean
   getFullData?: boolean
   maxLengthInSeconds?: number
@@ -82,9 +84,9 @@ export default async function downloadYouTubePlaylist({
   // Create the needed directories to store the data.
   const subFolder = audioOnly ? 'audio' : 'video'
   const directories = [
-    'data',
-    `data/${playlistName}`,
-    `data/${playlistName}/${subFolder}`,
+    directory,
+    `${directory}/${playlistName}`,
+    `${directory}/${playlistName}/${subFolder}`,
   ]
   directories.forEach(dir => {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir)
@@ -95,14 +97,14 @@ export default async function downloadYouTubePlaylist({
    * if we need to.
    */
   await Bun.write(
-    `./data/${playlistName}/responses.json`,
+    `${directories[1]}/responses.json`,
     JSON.stringify(fullData, null, 2)
   )
 
   // Create an array of objects containing the metadata we want on the videos.
   const videos = getVideoMetadata(fullData)
 
-  const existingIds = getExistingVideoIds({playlistName, audioOnly})
+  const existingIds = getExistingVideoIds({playlistName, audioOnly, directory})
 
   await downloadAllVideos({
     videos,
@@ -110,11 +112,12 @@ export default async function downloadYouTubePlaylist({
     maxLengthInSeconds,
     playlistName,
     audioOnly,
+    directory,
   })
 
   // Write the video metadata to a new file.
   await Bun.write(
-    `./data/${playlistName}/videoMetadata.json`,
+    `${directories[1]}/videoMetadata.json`,
     JSON.stringify(videos, null, 2)
   )
 }

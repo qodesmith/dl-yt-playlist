@@ -1,5 +1,6 @@
 import downloadYouTubePlaylist from './src/main'
 import minimist from 'minimist'
+import path from 'node:path'
 
 const {PLAYLIST_ID: playlistId, API_KEY: apiKey} = process.env
 if (!playlistId) throw new Error('No PLAYLIST_ID env variable found')
@@ -9,4 +10,10 @@ const {audioOnly} = minimist<{audioOnly: boolean}>(Bun.argv, {
   boolean: ['audioOnly'],
 })
 
-downloadYouTubePlaylist({playlistId, apiKey, audioOnly, getFullData: true})
+downloadYouTubePlaylist({
+  playlistId,
+  apiKey,
+  audioOnly,
+  getFullData: false,
+  directory: path.resolve(path.resolve(), 'data'),
+})

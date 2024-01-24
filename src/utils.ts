@@ -147,10 +147,12 @@ async function downloadVideo({
   videoUrl,
   playlistName,
   audioOnly,
+  directory,
 }: {
   videoUrl: string
   playlistName: string
   audioOnly: boolean | undefined
+  directory: string
 }): Promise<void> {
   return new Promise((resolve, reject) => {
     /**
@@ -162,7 +164,7 @@ async function downloadVideo({
      * Prefer `title` over `fulltitle`
      */
     const subFolder = audioOnly ? 'audio' : 'video'
-    const template = `-o './data/${playlistName}/${subFolder}/%(title)s [%(id)s].%(ext)s'`
+    const template = `-o '${directory}/${playlistName}/${subFolder}/%(title)s [%(id)s].%(ext)s'`
     const options = audioOnly
       ? '--extract-audio --audio-format mp3 --audio-quality 0'
       : '-f mp4'
@@ -197,12 +199,14 @@ export async function downloadAllVideos({
   maxLengthInSeconds,
   playlistName,
   audioOnly,
+  directory,
 }: {
   videos: Video[]
   existingIds: Set<string>
   maxLengthInSeconds: number
   playlistName: string
   audioOnly: boolean
+  directory: string
 }) {
   // Avoid fetching and creating audio we already have.
   const videosToProcess = videos.filter(({id, lengthInSeconds}) => {
@@ -221,7 +225,7 @@ export async function downloadAllVideos({
     return async () => {
       console.log(`${counter} Downloading ${title}...`)
 
-      return downloadVideo({videoUrl: url, playlistName, audioOnly})
+      return downloadVideo({videoUrl: url, playlistName, audioOnly, directory})
         .then(() => {
           console.log(`${counter} ✅ Success!`)
         })
@@ -245,13 +249,15 @@ export async function downloadAllVideos({
 export function getExistingVideoIds({
   playlistName,
   audioOnly,
+  directory,
 }: {
   playlistName: string
   audioOnly: boolean
+  directory: string
 }): Set<string> {
   const subFolder = audioOnly ? 'audio' : 'video'
   const existingFileNames = fs.readdirSync(
-    `./data/${playlistName}/${subFolder}`
+    `${directory}/${playlistName}/${subFolder}`
   )
 
   return existingFileNames.reduce((acc, fileName) => {
