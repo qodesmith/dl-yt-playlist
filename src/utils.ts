@@ -213,10 +213,11 @@ export async function downloadAllVideos({
     return !existingIds.has(id) && lengthInSeconds <= maxLengthInSeconds
   })
   const totalVideoCount = videosToProcess.length
+  const failures: Failure[] = []
 
   if (!totalVideoCount) {
     console.log('😎 All videos already accounted for')
-    return
+    return getResultsMetadata({failures, totalVideoCount})
   }
 
   const promiseFxns = videosToProcess.map(({title, url}, i) => {
@@ -229,15 +230,35 @@ export async function downloadAllVideos({
         .then(() => {
           console.log(`${counter} ✅ Success!`)
         })
-        .catch(() => {
+        .catch((error: unknown) => {
+          failures.push({url, title, error})
           console.log(`${counter} ❌ Failed to download`)
         })
     }
   })
 
-  return promiseFxns.reduce((acc, fxn) => {
-    return acc.then(fxn)
-  }, Promise.resolve())
+  return promiseFxns
+    .reduce((acc, fxn) => acc.then(fxn), Promise.resolve())
+    .then(() => getResultsMetadata({failures, totalVideoCount}))
+}
+
+type Failure = {url: string; title: string; error: unknown}
+function getResultsMetadata({
+  failures,
+  totalVideoCount,
+}: {
+  failures: Failure[]
+  totalVideoCount: number
+}) {
+  const date = new Date()
+
+  return {
+    failures,
+    failureCount: failures.length,
+    date: date.toLocaleString(),
+    dateNum: +date,
+    totalVideoCount,
+  }
 }
 
 /**

@@ -106,7 +106,7 @@ export default async function downloadYouTubePlaylist({
 
   const existingIds = getExistingVideoIds({playlistName, audioOnly, directory})
 
-  await downloadAllVideos({
+  const resultsMetadata = await downloadAllVideos({
     videos,
     existingIds,
     maxLengthInSeconds,
@@ -120,4 +120,6 @@ export default async function downloadYouTubePlaylist({
     `${directories[1]}/videoMetadata.json`,
     JSON.stringify(videos, null, 2)
   )
+
+  return resultsMetadata
 }
