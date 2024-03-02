@@ -56,11 +56,16 @@ async function genSinglePageData({
   yt,
   maxResults = 50,
 }: SinglePageDataInput): Promise<PageData> {
-  // https://developers.google.com/youtube/v3/docs/playlistItems/list
+  /**
+   * https://developers.google.com/youtube/v3/docs/playlistItems/list
+   *
+   * Data returned in the `items` field:
+   * https://developers.google.com/youtube/v3/docs/playlistItems#resource
+   */
   const playlistResponse = await yt.playlistItems.list({
     // Required params.
     playlistId,
-    part: ['contentDetails', 'snippet'],
+    part: ['contentDetails', 'snippet', 'status'],
 
     // Optional params.
     pageToken,
