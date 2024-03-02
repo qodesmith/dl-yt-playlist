@@ -1,26 +1,26 @@
 import fs from 'node:fs'
 
-export function getStats(rootDir: string) {
-  const dirs = fs
-    .readdirSync(rootDir)
-    .flatMap(dir => {
-      return ['audio', 'video'].map(subDir => {
-        try {
-          const folderDir = `${rootDir}/${dir}/${subDir}`
-          const stats = fs.statSync(folderDir)
-          if (!stats.isDirectory()) return
+export function getStats(rootDir: string): FolderData[] {
+  return fs.readdirSync(rootDir).flatMap(dir => {
+    return ['audio', 'video'].reduce<FolderData[]>((acc, subDir) => {
+      try {
+        const folderDir = `${rootDir}/${dir}/${subDir}`
+        const stats = fs.statSync(folderDir)
 
-          return getFolderData({
-            dir: folderDir,
-            extension: subDir === 'audio' ? 'mp3' : 'mp4',
-            playlistName: dir,
-          })
-        } catch (e) {}
-      })
-    })
-    .filter(Boolean)
+        if (stats.isDirectory()) {
+          acc.push(
+            getFolderData({
+              dir: folderDir,
+              extension: subDir === 'audio' ? 'mp3' : 'mp4',
+              playlistName: dir,
+            })
+          )
+        }
+      } catch (e) {}
 
-  console.table(dirs)
+      return acc
+    }, [])
+  })
 }
 
 type GetFolderDataArg = {
@@ -29,7 +29,18 @@ type GetFolderDataArg = {
   playlistName: string
 }
 
-function getFolderData({dir, extension, playlistName}: GetFolderDataArg) {
+type FolderData = {
+  playlistName: string
+  fileType: 'audio' | 'video'
+  totalFiles: number
+  totalSize: string
+}
+
+function getFolderData({
+  dir,
+  extension,
+  playlistName,
+}: GetFolderDataArg): FolderData {
   const fileNames = fs
     .readdirSync(dir)
     .filter(item => item.endsWith(`.${extension}`))
@@ -46,7 +57,7 @@ function getFolderData({dir, extension, playlistName}: GetFolderDataArg) {
   }
 }
 
-function bytesToSize(bytes: number) {
+function bytesToSize(bytes: number): string {
   if (bytes >= 1073741824) {
     return processBytesMath(bytes / 1073741824) + ' GB'
   } else if (bytes >= 1048576) {
@@ -62,7 +73,7 @@ function bytesToSize(bytes: number) {
   }
 }
 
-function processBytesMath(mathResult: number) {
+function processBytesMath(mathResult: number): string {
   const [num, decimal] = mathResult.toString().split('.')
   return decimal === '00' ? num : `${num}.${decimal.slice(0, 2)}`
 }

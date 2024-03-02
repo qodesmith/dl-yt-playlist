@@ -13,7 +13,7 @@
     "video": "bun downloadYoutubePlaylist.ts",
     "build": "bun build.ts"
   },
-  "description": "Download all YouTube videos (or audio only) from every video in a playlist!",
+  "description": "Download all videos (or audio only) from a YouTube playlist!",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/qodesmith/dl-yt-playlist.git"
