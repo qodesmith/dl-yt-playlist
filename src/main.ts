@@ -120,7 +120,7 @@ export default async function downloadYouTubePlaylist({
 
   if (jsonOnly) {
     console.log('\nOnly JSON files written!\n')
-    return getResultsMetadata({failures: [], totalVideoCount: 0})
+    return getResultsMetadata({failures: [], totalVideosDownloaded: 0})
   }
 
   const existingIds = getExistingVideoIds({playlistName, audioOnly, directory})

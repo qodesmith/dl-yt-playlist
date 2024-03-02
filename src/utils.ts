@@ -207,7 +207,7 @@ export async function downloadAllVideos({
   playlistName: string
   audioOnly: boolean
   directory: string
-}) {
+}): Promise<ResultsMetadata> {
   // Avoid fetching and creating audio we already have.
   const videosToProcess = videos.filter(({id, lengthInSeconds}) => {
     return !existingIds.has(id) && lengthInSeconds <= maxLengthInSeconds
@@ -217,7 +217,10 @@ export async function downloadAllVideos({
 
   if (!totalVideoCount) {
     console.log('😎 All videos already accounted for')
-    return getResultsMetadata({failures, totalVideoCount})
+    return getResultsMetadata({
+      failures,
+      totalVideosDownloaded: totalVideoCount,
+    })
   }
 
   const promiseFxns = videosToProcess.map(({title, url}, i) => {
@@ -239,17 +242,28 @@ export async function downloadAllVideos({
 
   return promiseFxns
     .reduce((acc, fxn) => acc.then(fxn), Promise.resolve())
-    .then(() => getResultsMetadata({failures, totalVideoCount}))
+    .then(() =>
+      getResultsMetadata({failures, totalVideosDownloaded: totalVideoCount})
+    )
 }
 
 type Failure = {url: string; title: string; error: unknown}
-function getResultsMetadata({
+
+export type ResultsMetadata = {
+  failures: Failure[]
+  failureCount: number
+  date: string
+  dateNum: number
+  totalVideosDownloaded: number
+}
+
+export function getResultsMetadata({
   failures,
-  totalVideoCount,
+  totalVideosDownloaded,
 }: {
   failures: Failure[]
-  totalVideoCount: number
-}) {
+  totalVideosDownloaded: number
+}): ResultsMetadata {
   const date = new Date()
 
   return {
@@ -257,7 +271,7 @@ function getResultsMetadata({
     failureCount: failures.length,
     date: date.toLocaleString(),
     dateNum: +date,
-    totalVideoCount,
+    totalVideosDownloaded,
   }
 }
 

@@ -15,5 +15,6 @@ downloadYouTubePlaylist({
   apiKey,
   audioOnly,
   getFullData: false,
-  directory: path.resolve(path.resolve(), 'data'),
+  jsonOnly: true,
+  directory: path.resolve(import.meta.dir, './data'),
 })
