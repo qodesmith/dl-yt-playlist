@@ -13,7 +13,13 @@
 
 import fs from 'node:fs'
 import {genData, genPlaylistName} from './youtubeApiCalls'
-import {downloadAllVideos, getExistingVideoIds, getVideoMetadata} from './utils'
+import {
+  ResultsMetadata,
+  downloadAllVideos,
+  getExistingVideoIds,
+  getResultsMetadata,
+  getVideoMetadata,
+} from './utils'
 // https://googleapis.dev/nodejs/googleapis/latest/youtube/classes/Youtube.html
 import google from '@googleapis/youtube'
 
@@ -27,6 +33,7 @@ export default async function downloadYouTubePlaylist({
   audioOnly = false,
   getFullData = false,
   maxLengthInSeconds = Infinity,
+  jsonOnly = false,
 }: {
   playlistId: string
   apiKey: string
@@ -34,7 +41,8 @@ export default async function downloadYouTubePlaylist({
   audioOnly?: boolean
   getFullData?: boolean
   maxLengthInSeconds?: number
-}) {
+  jsonOnly?: boolean
+}): Promise<ResultsMetadata> {
   // First check if we have `yt-dlp` installed on the system.
   try {
     const proc = Bun.spawnSync(['yt-dlp', '--version'])
@@ -104,6 +112,17 @@ export default async function downloadYouTubePlaylist({
   // Create an array of objects containing the metadata we want on the videos.
   const videos = getVideoMetadata(fullData)
 
+  // Write the video metadata to a new file.
+  await Bun.write(
+    `${directories[1]}/videoMetadata.json`,
+    JSON.stringify(videos, null, 2)
+  )
+
+  if (jsonOnly) {
+    console.log('\nOnly JSON files written!\n')
+    return getResultsMetadata({failures: [], totalVideoCount: 0})
+  }
+
   const existingIds = getExistingVideoIds({playlistName, audioOnly, directory})
 
   const resultsMetadata = await downloadAllVideos({
@@ -114,12 +133,6 @@ export default async function downloadYouTubePlaylist({
     audioOnly,
     directory,
   })
-
-  // Write the video metadata to a new file.
-  await Bun.write(
-    `${directories[1]}/videoMetadata.json`,
-    JSON.stringify(videos, null, 2)
-  )
 
   return resultsMetadata
 }
