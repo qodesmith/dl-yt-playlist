@@ -1,4 +1,4 @@
-import downloadYouTubePlaylist from './src/main'
+import {downloadYouTubePlaylist} from './src/main'
 import minimist from 'minimist'
 import path from 'node:path'
 
@@ -15,6 +15,6 @@ downloadYouTubePlaylist({
   apiKey,
   audioOnly,
   getFullData: false,
-  jsonOnly: true,
+  // jsonOnly: true,
   directory: path.resolve(import.meta.dir, './data'),
 })

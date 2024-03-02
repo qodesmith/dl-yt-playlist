@@ -23,10 +23,12 @@ import {
 // https://googleapis.dev/nodejs/googleapis/latest/youtube/classes/Youtube.html
 import google from '@googleapis/youtube'
 
+export {getStats} from './getStats'
+
 /**
  * Download all the videos (or audio only) in a YouTube playlist!
  */
-export default async function downloadYouTubePlaylist({
+export async function downloadYouTubePlaylist({
   playlistId,
   apiKey,
   directory,

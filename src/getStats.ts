@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 
-function getStats(rootDir: string) {
+export function getStats(rootDir: string) {
   const dirs = fs
     .readdirSync(rootDir)
     .flatMap(dir => {
@@ -40,6 +40,7 @@ function getFolderData({dir, extension, playlistName}: GetFolderDataArg) {
 
   return {
     playlistName,
+    fileType: extension === 'mp3' ? 'audio' : 'video',
     totalFiles: fileNames.length,
     totalSize: bytesToSize(totalSize),
   }
@@ -65,5 +66,3 @@ function processBytesMath(mathResult: number) {
   const [num, decimal] = mathResult.toString().split('.')
   return decimal === '00' ? num : `${num}.${decimal.slice(0, 2)}`
 }
-
-getStats('./data')

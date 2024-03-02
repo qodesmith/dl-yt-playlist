@@ -15,19 +15,20 @@ You'll need a few things to use this project:
 Say you have this code in a file named `download.ts`:
 
 ```typescript
-import dl from 'dl-yt-playlist'
+import {downloadYoutubePlaylist} from 'dl-yt-playlist'
 
 const {playlistId, apiKey} = process.env
 
-dl({
+const resultsMetadata = await downloadYoutubePlaylist({
   // Required:
-  playlistId: string, // The YouTube playlist id
-  apiKey: string, // Your YouTube Data api key
+  playlistId: <string>, // The YouTube playlist id
+  apiKey: <string>, // Your YouTube Data api key
 
   // Optional:
-  audioOnly: boolean, // `true` for audio MP3, `false` for video MP4
-  getFullData: boolean, // `false` will only get the 1st 50 videos
-  maxLengthInSeconds: number, // Videos longer than this will be skipped
+  audioOnly: <boolean>, // `true` for audio MP3, `false` for video MP4
+  getFullData: <boolean>, // `false` will only get the 1st 50 videos
+  jsonOnly: <boolean>, // Skips download video files, generates JSON files only
+  maxLengthInSeconds: <number>, // Videos longer than this will be skipped
 })
 ```
 
@@ -78,6 +79,7 @@ Each video will have metadata stored in the `videoMetadata.json` with the follow
   id: string
   title: string
   channel: string
+  publishedAt: string
   dateAddedToPlaylist: string
   url: string
   lengthInSeconds: number
