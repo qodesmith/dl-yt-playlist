@@ -66,7 +66,7 @@ async function genSinglePageData({
   const playlistResponse = await yt.playlistItems.list({
     // Required params.
     playlistId,
-    part: ['contentDetails', 'snippet', 'status'],
+    part: ['contentDetails', 'id', 'snippet', 'status'],
 
     // Optional params.
     pageToken,

@@ -3,10 +3,12 @@ import {execSync} from 'child_process'
 import fs from 'node:fs'
 import type {PageData} from './youtubeApiCalls'
 
-export type VideoIdAndDates = Record<
-  string,
-  {dateAddedToPlaylist: string; dateCreated: string}
->
+type VideoDateData = {
+  dateAddedToPlaylist: string
+  dateCreated: string | null
+}
+
+export type VideoIdAndDates = Record<string, VideoDateData>
 
 /**
  * Returns an object where the keys are video ids and the values are the dates
@@ -25,20 +27,14 @@ export function getVideoIdsAndDatesAddedFromPlaylistResponse(playlistResponse: {
         throw new Error('`contentDetails.videoId` missing from playlist item')
       }
 
-      // Date video was created.
-      if (!contentDetails.videoPublishedAt) {
-        throw new Error(
-          '`contentDetails.videoPublishedAt` missing from playlist item'
-        )
-      }
-
       // Date added to playlist.
       if (!snippet?.publishedAt) {
         throw new Error('`snippet.publishedAt` missing from playlist item')
       }
 
       acc[contentDetails.videoId] = {
-        dateCreated: contentDetails.videoPublishedAt,
+        // If this is missing, it is because the video is private or deleted.
+        dateCreated: contentDetails.videoPublishedAt ?? null,
         dateAddedToPlaylist: snippet.publishedAt,
       }
 
@@ -64,8 +60,10 @@ export function getUnavailableVideoPlaylistItemIds({
     ({contentDetails}) => !videoIdSet.has(contentDetails?.videoId)
   )
 
-  return missingPlaylistVideos.reduce((acc: string[], {id}) => {
-    if (id) acc.push(id)
+  return missingPlaylistVideos.reduce((acc: string[], {contentDetails}) => {
+    const {videoId} = contentDetails ?? {}
+    if (videoId) acc.push(videoId)
+
     return acc
   }, [])
 }
@@ -74,8 +72,8 @@ export type Video = {
   id: string
   title: string
   channel: string
-  dateCreated: string
-  dateAddedToPlaylist: string
+  dateCreated: VideoDateData['dateCreated']
+  dateAddedToPlaylist: VideoDateData['dateAddedToPlaylist']
   url: string
   lengthInSeconds: number
 }
