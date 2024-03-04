@@ -3,32 +3,48 @@ import {execSync} from 'child_process'
 import fs from 'node:fs'
 import type {PageData} from './youtubeApiCalls'
 
+export type VideoIdAndDates = Record<
+  string,
+  {dateAddedToPlaylist: string; dateCreated: string}
+>
+
 /**
  * Returns an object where the keys are video ids and the values are the dates
  * those videos were added to the playlist.
  */
 export function getVideoIdsAndDatesAddedFromPlaylistResponse(playlistResponse: {
   data: youtube_v3.Schema$PlaylistItemListResponse
-}): Record<string, string> {
+}): VideoIdAndDates {
   if (!playlistResponse.data.items) {
     throw new Error('Missing playlistResponse.data.items')
   }
 
-  return playlistResponse.data.items.reduce(
+  return playlistResponse.data.items.reduce<VideoIdAndDates>(
     (acc, {contentDetails, snippet}) => {
       if (!contentDetails?.videoId) {
-        throw new Error('contentDetails or videoId missing from playlist item')
+        throw new Error('`contentDetails.videoId` missing from playlist item')
       }
 
+      // Date video was created.
+      if (!contentDetails.videoPublishedAt) {
+        throw new Error(
+          '`contentDetails.videoPublishedAt` missing from playlist item'
+        )
+      }
+
+      // Date added to playlist.
       if (!snippet?.publishedAt) {
-        throw new Error('snippet or publishedAt missing from playlist item')
+        throw new Error('`snippet.publishedAt` missing from playlist item')
       }
 
-      acc[contentDetails.videoId] = snippet.publishedAt
+      acc[contentDetails.videoId] = {
+        dateCreated: contentDetails.videoPublishedAt,
+        dateAddedToPlaylist: snippet.publishedAt,
+      }
 
       return acc
     },
-    {} as Record<string, string>
+    {}
   )
 }
 
@@ -58,7 +74,7 @@ export type Video = {
   id: string
   title: string
   channel: string
-  publishedAt: string
+  dateCreated: string
   dateAddedToPlaylist: string
   url: string
   lengthInSeconds: number
@@ -76,21 +92,16 @@ export function getVideoMetadata(allPages: PageData[]): Video[] {
     .reduce((acc: Video[], {videosResponse, videoIdsAndDates}) => {
       videosResponse.data.items?.forEach(item => {
         const {id} = item
-        const dateAddedToPlaylist = videoIdsAndDates[id ?? '']
-        const {channelTitle: channel, title, publishedAt} = item.snippet ?? {}
+        if (!id) return acc
+
+        const {dateAddedToPlaylist, dateCreated} = videoIdsAndDates[id]
+        const {channelTitle: channel, title} = item.snippet ?? {}
         const url = `https://www.youtube.com/watch?v=${id}`
         const lengthInSeconds = parseISO8601Duration(
           item.contentDetails?.duration
         )
 
-        if (
-          !id ||
-          !title ||
-          !channel ||
-          !publishedAt ||
-          !dateAddedToPlaylist ||
-          lengthInSeconds === null
-        ) {
+        if (!id || !title || !channel || lengthInSeconds === null) {
           throw new Error('Property missing from video')
         }
 
@@ -98,7 +109,7 @@ export function getVideoMetadata(allPages: PageData[]): Video[] {
           id,
           title,
           channel,
-          publishedAt,
+          dateCreated,
           dateAddedToPlaylist,
           url,
           lengthInSeconds,

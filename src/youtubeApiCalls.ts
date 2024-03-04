@@ -2,6 +2,7 @@ import type {youtube_v3} from '@googleapis/youtube'
 import type {GaxiosResponse} from 'googleapis-common'
 
 import {
+  VideoIdAndDates,
   getUnavailableVideoPlaylistItemIds,
   getVideoIdsAndDatesAddedFromPlaylistResponse,
 } from './utils'
@@ -18,7 +19,7 @@ export type PageData = {
   playlistResponse: GaxiosResponse<youtube_v3.Schema$PlaylistItemListResponse>
   videosResponse: GaxiosResponse<youtube_v3.Schema$VideoListResponse>
   unavailableItemIds: string[]
-  videoIdsAndDates: Record<string, string>
+  videoIdsAndDates: VideoIdAndDates
 }
 
 export async function genPlaylistName({
@@ -128,7 +129,7 @@ export async function genData({
   getFullData,
   yt,
   maxResults = 50,
-}: PageDataInput) {
+}: PageDataInput): Promise<PageData[]> {
   // Initiate a single request.
   const pageData = await genSinglePageData({
     playlistId,
