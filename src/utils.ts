@@ -55,14 +55,19 @@ export function getUnavailableVideoPlaylistItemIds({
 }: GetUnavailableVideoPlaylistItemIdsInput): string[] {
   const playlistItems = playlistResponse.data.items ?? []
   const videoItems = videosResponse.data.items ?? []
-  const videoIdSet = new Set(videoItems.map(({id}) => id))
-  const missingPlaylistVideos = playlistItems.filter(
-    ({contentDetails}) => !videoIdSet.has(contentDetails?.videoId)
-  )
+  const videosResponseIdSet = new Set(videoItems.map(({id}) => id))
 
-  return missingPlaylistVideos.reduce((acc: string[], {contentDetails}) => {
+  /**
+   * Missing videos are calculated by diff'ing the id's from the
+   * playlistResponse (which contain all videos, even those deleted or removed)
+   * and the id's from the videosResponse, which only contains available videos.
+   */
+  return playlistItems.reduce<string[]>((acc, {contentDetails}) => {
     const {videoId} = contentDetails ?? {}
-    if (videoId) acc.push(videoId)
+
+    if (videoId && !videosResponseIdSet.has(videoId)) {
+      acc.push(videoId)
+    }
 
     return acc
   }, [])
@@ -285,6 +290,27 @@ export function getResultsMetadata({
 }
 
 /**
+ * This regex pattern matches a square bracket followed by one or more
+ * alphanumeric characters or the special characters `-` and `_`, followed
+ * by a closing square bracket. The .\w+$ part matches the file extension
+ * and ensures that the match is at the end of the file name.
+ *
+ * Here's a step-by-step explanation of the regex pattern:
+ * 1. `\[` - Matches a literal opening square bracket
+ * 2. `(` - Starts a capturing group
+ * 3. `[a-zA-Z0-9_-]` - Matches any alphanumeric character or the special characters `-` and `_`
+ * 4. `+` - Matches one or more of the preceding characters
+ * 5. `)` - Ends the capturing group
+ * 6. `\]` - Matches a literal closing square bracket
+ * 7. `\.` - Matches a literal dot
+ * 8. `\w+` - Matches one or more word characters (i.e., the file extension)
+ * 9. `$` - Matches the end of the string
+ *
+ * Thanks to perplexity.ai for generating this regex!
+ */
+export const squareBracketIdRegex = /\[([a-zA-Z0-9_-]+)\]\.\w+$/
+
+/**
  * Reads the './data/audio' folder, iterates through all the files, and pulls
  * out the YouTube id from each file. Returns a set of the ids.
  *
@@ -305,29 +331,8 @@ export function getExistingVideoIds({
   )
 
   return existingFileNames.reduce((acc, fileName) => {
-    /**
-     * This regex pattern matches a square bracket followed by one or more
-     * alphanumeric characters or the special characters `-` and `_`, followed
-     * by a closing square bracket. The .\w+$ part matches the file extension
-     * and ensures that the match is at the end of the file name.
-     *
-     * Here's a step-by-step explanation of the regex pattern:
-     * 1. `\[` - Matches a literal opening square bracket
-     * 2. `(` - Starts a capturing group
-     * 3. `[a-zA-Z0-9_-]` - Matches any alphanumeric character or the special characters `-` and `_`
-     * 4. `+` - Matches one or more of the preceding characters
-     * 5. `)` - Ends the capturing group
-     * 6. `\]` - Matches a literal closing square bracket
-     * 7. `\.` - Matches a literal dot
-     * 8. `\w+` - Matches one or more word characters (i.e., the file extension)
-     * 9. `$` - Matches the end of the string
-     *
-     * Thanks to perplexity.ai for generating this regex!
-     */
-    const regex = /\[([a-zA-Z0-9_-]+)\]\.\w+$/
-
     // 'Video Title [123-_abc123].mp3' => '123-_abc123'
-    const id = fileName.match(regex)?.[1]
+    const id = fileName.match(squareBracketIdRegex)?.[1]
     if (id) acc.add(id)
 
     return acc
