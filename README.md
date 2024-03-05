@@ -23,12 +23,14 @@ const resultsMetadata = await downloadYoutubePlaylist({
   // Required:
   playlistId: <string>, // The YouTube playlist id
   apiKey: <string>, // Your YouTube Data api key
+  directory: <string>, // The full path where you want to save everything
 
   // Optional:
-  audioOnly: <boolean>, // `true` for audio MP3, `false` for video MP4
-  getFullData: <boolean>, // `false` will only get the 1st 50 videos
-  jsonOnly: <boolean>, // Skips download video files, generates JSON files only
-  maxLengthInSeconds: <number>, // Videos longer than this will be skipped
+  audioOnly: <boolean>, // `true` for audio MP3, `false` for video MP4 (default `false`)
+  getFullData: <boolean>, // `false` will only get the 1st 50 videos (default `false`)
+  maxLengthInSeconds: <number>, // Videos longer than this will be skipped (default `Infinity`)
+  downloadData: <boolean>, // `true` downloads the YouTube videos (default `true`)
+  downloadThumbnails: <boolean>, // `true` downloads jpg thumbnail files (default `true`)
 })
 ```
 
@@ -46,7 +48,11 @@ Downloads will be organized into the following folder structure:
 data
   /<playlist name>
     /video
+      <title> [<video id>].mp4
     /audio
+      <title> [<video id>].mp3
+    /thumbnails
+      <video id>.jpg
     responses.json
     videoMetadata.json
 ```
@@ -59,6 +65,10 @@ data
   <tr>
     <td><code>/audio</code></td>
     <td>This folder will contain all the mp3 audio files</td>
+  </tr>
+  <tr>
+    <td><code>/thumbnails</code></td>
+    <td>This folder will contain all the jpg thumbnail files</td>
   </tr>
   <tr>
     <td><code>responses.json</code></td>
