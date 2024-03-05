@@ -2,36 +2,44 @@ import fs from 'node:fs'
 
 export function getStats(rootDir: string): FolderData[] {
   return fs.readdirSync(rootDir).flatMap(dir => {
-    return ['audio', 'video'].reduce<FolderData[]>((acc, subDir) => {
-      try {
-        const folderDir = `${rootDir}/${dir}/${subDir}`
-        const stats = fs.statSync(folderDir)
+    return ['audio', 'video', 'thumbnails'].reduce<FolderData[]>(
+      (acc, subDir) => {
+        try {
+          const folderDir = `${rootDir}/${dir}/${subDir}`
+          const stats = fs.statSync(folderDir)
 
-        if (stats.isDirectory()) {
-          acc.push(
-            getFolderData({
-              dir: folderDir,
-              extension: subDir === 'audio' ? 'mp3' : 'mp4',
-              playlistName: dir,
-            })
-          )
-        }
-      } catch (e) {}
+          if (stats.isDirectory()) {
+            acc.push(
+              getFolderData({
+                dir: folderDir,
+                extension:
+                  subDir === 'thumbnails'
+                    ? 'jpg'
+                    : subDir === 'audio'
+                    ? 'mp3'
+                    : 'mp4',
+                playlistName: dir,
+              })
+            )
+          }
+        } catch (e) {}
 
-      return acc
-    }, [])
+        return acc
+      },
+      []
+    )
   })
 }
 
 type GetFolderDataArg = {
   dir: string
-  extension: string
+  extension: 'mp3' | 'mp4' | 'jpg'
   playlistName: string
 }
 
 type FolderData = {
   playlistName: string
-  fileType: 'audio' | 'video'
+  fileType: GetFolderDataArg['extension']
   totalFiles: number
   totalSize: string
 }
@@ -51,7 +59,7 @@ function getFolderData({
 
   return {
     playlistName,
-    fileType: extension === 'mp3' ? 'audio' : 'video',
+    fileType: extension,
     totalFiles: fileNames.length,
     totalSize: bytesToSize(totalSize),
   }
