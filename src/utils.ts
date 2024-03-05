@@ -416,7 +416,8 @@ export async function downloadAllThumbnails({
       }
     }
   })
-  const promiseFxnChunks = chunkArray(promiseFxns, 4)
+  const chunkSize = 4
+  const promiseFxnChunks = chunkArray(promiseFxns, chunkSize)
   const chunkCount = promiseFxnChunks.length
 
   /**
@@ -427,7 +428,7 @@ export async function downloadAllThumbnails({
     const counter = `(${i + 1} of ${chunkCount})`
 
     return accPromise.then(() => {
-      console.log(`${counter} Downloading chunk...`)
+      console.log(`${counter} Downloading thumbnail batch of ${chunkSize}...`)
 
       const promises = promiseFxnsArr.map(fxn => fxn())
       return Promise.all(promises).then(() => {
