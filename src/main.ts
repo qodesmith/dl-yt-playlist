@@ -97,13 +97,13 @@ export async function downloadYouTubePlaylist({
 
   // Create the needed directories to store the data.
   const contentFolder = audioOnly ? 'audio' : 'video'
-  const directories = [
-    directory,
-    `${directory}/${playlistName}`,
-    `${directory}/${playlistName}/${contentFolder}`,
-    `${directory}/${playlistName}/thumbnails`,
-  ]
-  directories.forEach(dir => {
+  const directories = {
+    baseDir: directory,
+    playlistDir: `${directory}/${playlistName}`,
+    contentDir: `${directory}/${playlistName}/${contentFolder}`,
+    thumbnailDir: `${directory}/${playlistName}/thumbnails`,
+  }
+  Object.values(directories).forEach(dir => {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir)
   })
 
@@ -112,7 +112,7 @@ export async function downloadYouTubePlaylist({
    * if we need to.
    */
   await Bun.write(
-    `${directories[1]}/responses.json`,
+    `${directories.playlistDir}/responses.json`,
     JSON.stringify(fullData, null, 2)
   )
 
@@ -121,7 +121,7 @@ export async function downloadYouTubePlaylist({
 
   // Write the video metadata to a new file.
   await Bun.write(
-    `${directories[1]}/videoMetadata.json`,
+    `${directories.playlistDir}/videoMetadata.json`,
     JSON.stringify(videos, null, 2)
   )
 
@@ -152,7 +152,7 @@ export async function downloadYouTubePlaylist({
   if (downloadThumbnails) {
     finalResultsData = await downloadAllThumbnails({
       fullData,
-      directory: directories.at(-1) as string,
+      directory: directories.thumbnailDir,
       resultsMetadata: finalResultsData,
     })
   }
