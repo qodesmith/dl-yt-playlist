@@ -15,6 +15,7 @@ import fs from 'node:fs'
 import {genData, genPlaylistName} from './youtubeApiCalls'
 import {
   ResultsMetadata,
+  downloadAllThumbnails,
   downloadAllVideos,
   getExistingVideoIds,
   getResultsMetadata,
@@ -36,7 +37,8 @@ export async function downloadYouTubePlaylist({
   audioOnly = false,
   getFullData = false,
   maxLengthInSeconds = Infinity,
-  jsonOnly = false,
+  downloadData = true,
+  downloadThumbnails = true,
 }: {
   playlistId: string
   apiKey: string
@@ -44,7 +46,8 @@ export async function downloadYouTubePlaylist({
   audioOnly?: boolean
   getFullData?: boolean
   maxLengthInSeconds?: number
-  jsonOnly?: boolean
+  downloadData?: boolean
+  downloadThumbnails?: boolean
 }): Promise<ResultsMetadata> {
   // First check if we have `yt-dlp` installed on the system.
   try {
@@ -93,11 +96,12 @@ export async function downloadYouTubePlaylist({
   )
 
   // Create the needed directories to store the data.
-  const subFolder = audioOnly ? 'audio' : 'video'
+  const contentFolder = audioOnly ? 'audio' : 'video'
   const directories = [
     directory,
     `${directory}/${playlistName}`,
-    `${directory}/${playlistName}/${subFolder}`,
+    `${directory}/${playlistName}/${contentFolder}`,
+    `${directory}/${playlistName}/thumbnails`,
   ]
   directories.forEach(dir => {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir)
@@ -121,21 +125,37 @@ export async function downloadYouTubePlaylist({
     JSON.stringify(videos, null, 2)
   )
 
-  if (jsonOnly) {
+  if (!downloadData && !downloadThumbnails) {
     console.log('\nOnly JSON files written!\n')
-    return getResultsMetadata({failures: [], totalVideosDownloaded: 0})
+    return getResultsMetadata()
   }
 
-  const existingIds = getExistingVideoIds({playlistName, audioOnly, directory})
+  let videoResultsData = getResultsMetadata()
+  if (downloadData) {
+    const existingIds = getExistingVideoIds({
+      playlistName,
+      audioOnly,
+      directory,
+    })
 
-  const resultsMetadata = await downloadAllVideos({
-    videos,
-    existingIds,
-    maxLengthInSeconds,
-    playlistName,
-    audioOnly,
-    directory,
-  })
+    videoResultsData = await downloadAllVideos({
+      videos,
+      existingIds,
+      maxLengthInSeconds,
+      playlistName,
+      audioOnly,
+      directory,
+    })
+  }
 
-  return resultsMetadata
+  let finalResultsData = videoResultsData
+  if (downloadThumbnails) {
+    finalResultsData = await downloadAllThumbnails({
+      fullData,
+      directory: directories.at(-1) as string,
+      resultsMetadata: finalResultsData,
+    })
+  }
+
+  return finalResultsData
 }

@@ -269,23 +269,30 @@ export type ResultsMetadata = {
   date: string
   dateNum: number
   totalVideosDownloaded: number
+  totalThumbnailsDownloaded: number
 }
 
 export function getResultsMetadata({
-  failures,
-  totalVideosDownloaded,
+  failures = [],
+  totalVideosDownloaded = 0,
+  totalThumbnailsDownloaded = 0,
 }: {
-  failures: Failure[]
-  totalVideosDownloaded: number
-}): ResultsMetadata {
+  failures?: Failure[]
+  totalVideosDownloaded?: number
+  totalThumbnailsDownloaded?: number
+} = {}): ResultsMetadata {
   const date = new Date()
 
   return {
-    failures,
+    failures: failures.map(({error, ...failure}) => ({
+      error: `${error}`,
+      ...failure,
+    })),
     failureCount: failures.length,
     date: date.toLocaleString(),
     dateNum: +date,
     totalVideosDownloaded,
+    totalThumbnailsDownloaded,
   }
 }
 
@@ -337,4 +344,102 @@ export function getExistingVideoIds({
 
     return acc
   }, new Set<string>())
+}
+
+function chunkArray<T>(arr: T[], size: number): T[][] {
+  return Array.from({length: Math.ceil(arr.length / size)}, (v, i) =>
+    arr.slice(i * size, i * size + size)
+  )
+}
+
+/**
+ * Iterates through `responses.json` to aggregate the highest resolution of all
+ * video thumbnails and downloads them.
+ */
+export async function downloadAllThumbnails({
+  fullData,
+  directory,
+  resultsMetadata,
+}: {
+  fullData: PageData[]
+  directory: string
+  resultsMetadata: ResultsMetadata
+}) {
+  const thumbnailFailures: Failure[] = []
+  const existingThumbnailSet = new Set(
+    fs.readdirSync(directory).reduce<string[]>((acc, fileName) => {
+      if (fileName.endsWith('.jpg')) acc.push(fileName.slice(0, -4))
+      return acc
+    }, [])
+  )
+  const allThumbnailUrls = fullData.reduce<
+    {url: string; id: string; title: string}[]
+  >((acc, responseItem) => {
+    responseItem.playlistResponse.data.items?.forEach(item => {
+      const thumbnailData = item.snippet?.thumbnails ?? {}
+      const title = item.snippet?.title ?? ''
+      const id = item.contentDetails?.videoId
+
+      // Skip files we already have downloaded.
+      if (id && existingThumbnailSet.has(id)) return
+
+      const thumbnailUrl = (() => {
+        // https://developers.google.com/youtube/v3/docs/playlistItems#resource
+        const resolutions: (keyof typeof thumbnailData)[] = [
+          'maxres',
+          'high',
+          'standard',
+          'medium',
+          'default',
+        ]
+
+        for (const resolution of resolutions) {
+          const obj = thumbnailData[resolution]
+          if (obj) return obj.url
+        }
+      })()
+
+      if (id && thumbnailUrl) acc.push({id, url: thumbnailUrl, title})
+    })
+
+    return acc
+  }, [])
+  const promiseFxns = allThumbnailUrls.map(({url, id, title}) => {
+    return async () => {
+      try {
+        const res = await fetch(url)
+        const buffer = await res.arrayBuffer()
+        await Bun.write(`${directory}/${id}.jpg`, buffer)
+      } catch (error) {
+        thumbnailFailures.push({url, title, error})
+        console.log(`❌ Failed to download thumbnail (${id}) - ${url}`)
+      }
+    }
+  })
+  const promiseFxnChunks = chunkArray(promiseFxns, 4)
+  const chunkCount = promiseFxnChunks.length
+
+  /**
+   * Trigger the promises sequentially in batches and wait for all of them to
+   * finish.
+   */
+  await promiseFxnChunks.reduce((accPromise, promiseFxnsArr, i) => {
+    const counter = `(${i + 1} of ${chunkCount})`
+
+    return accPromise.then(() => {
+      console.log(`${counter} Downloading chunk...`)
+
+      const promises = promiseFxnsArr.map(fxn => fxn())
+      return Promise.all(promises).then(() => {
+        console.log(`${i + 1} of ${chunkCount} ✅ Success!`)
+      })
+    })
+  }, Promise.resolve())
+
+  return getResultsMetadata({
+    failures: resultsMetadata.failures.concat(thumbnailFailures),
+    totalVideosDownloaded: resultsMetadata.totalVideosDownloaded,
+    totalThumbnailsDownloaded:
+      allThumbnailUrls.length - thumbnailFailures.length,
+  })
 }

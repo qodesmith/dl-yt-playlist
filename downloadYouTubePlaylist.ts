@@ -10,11 +10,19 @@ const {audioOnly} = minimist<{audioOnly: boolean}>(Bun.argv, {
   boolean: ['audioOnly'],
 })
 
-downloadYouTubePlaylist({
+const {failures, ...resultsMetadata} = await downloadYouTubePlaylist({
   playlistId,
   apiKey,
   audioOnly,
   getFullData: false,
-  // jsonOnly: true,
   directory: path.resolve(import.meta.dir, './data'),
+  downloadData: false,
 })
+
+console.log('RESULTS:')
+console.table(resultsMetadata)
+
+if (failures.length) {
+  console.log('FAILURES:')
+  console.table(failures)
+}
