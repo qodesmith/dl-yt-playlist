@@ -24,6 +24,7 @@ import {
 import google from '@googleapis/youtube'
 
 export {getStats} from './getStats'
+export {getDeactivatedVideos} from './getDeactivatedVideos'
 
 /**
  * Download all the videos (or audio only) in a YouTube playlist!
