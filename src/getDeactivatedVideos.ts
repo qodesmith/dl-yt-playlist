@@ -25,15 +25,12 @@ export function getDeactivatedVideos({
     fs.readFileSync(`${playlistDir}/responses.json`, {encoding: 'utf8'})
   )
   const unavailableVideoIdsSet = new Set(
-    ytResponses.reduce<string[]>((acc, item) => {
-      return acc.concat(item.unavailableItemIds)
-    }, [])
-  )
-  const [audioDir, videoDir] = ['audio', 'video'].map(
-    folder => `${playlistDir}/${folder}`
+    ytResponses.flatMap(ytResponse => ytResponse.unavailableItemIds)
   )
 
-  return [audioDir, videoDir].reduce<DeactivatedVideo[]>((acc, dir) => {
+  return ['audio', 'video'].reduce<DeactivatedVideo[]>((acc, folder) => {
+    const dir = `${playlistDir}/${folder}`
+
     if (fs.existsSync(dir)) {
       fs.readdirSync(dir).forEach(fileName => {
         if (fileName.endsWith('.mp3') || fileName.endsWith('.mp4')) {
