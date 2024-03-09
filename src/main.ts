@@ -12,7 +12,8 @@
  */
 
 import fs from 'node:fs'
-import {genData, genPlaylistName} from './youtubeApiCalls'
+import {genPlaylistName} from './youtubeApiCalls2'
+import {genData} from './youtubeApiCalls'
 import {
   ResultsMetadata,
   downloadAllThumbnails,
@@ -71,7 +72,10 @@ export async function downloadYouTubePlaylist({
   }
 
   const yt = google.youtube({version: 'v3', auth: apiKey})
+
+  // The playlist name will be used to create a folder.
   const playlistName = await genPlaylistName({playlistId, yt})
+
   console.log('💻 Fetching playlist data from the YouTube API...')
   const start = performance.now()
 

@@ -22,6 +22,11 @@ export type PageData = {
   videoIdsAndDates: VideoIdAndDates
 }
 
+/**
+ * Calls the YouTube "Playlists: list" endpoint to get the playlist name.
+ *
+ * https://developers.google.com/youtube/v3/docs/playlists/list
+ */
 export async function genPlaylistName({
   playlistId,
   yt,
