@@ -27,18 +27,24 @@ export function createFolders({
     thumbnails: `${directory}/${playlistName}/thumbnails`,
   }
 
-  fs.mkdirSync(folderNames.playlist)
+  createFolderSafely(folderNames.playlist)
 
   if (downloadType === 'audio' || downloadType === 'both') {
-    fs.mkdirSync(folderNames.audio)
+    createFolderSafely(folderNames.audio)
   }
 
   if (downloadType === 'video' || downloadType === 'both') {
-    fs.mkdirSync(folderNames.video)
+    createFolderSafely(folderNames.video)
   }
 
   if (downloadThumbnails) {
-    fs.mkdirSync(folderNames.thumbnails)
+    createFolderSafely(folderNames.thumbnails)
+  }
+}
+
+function createFolderSafely(dir: string) {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir)
   }
 }
 
