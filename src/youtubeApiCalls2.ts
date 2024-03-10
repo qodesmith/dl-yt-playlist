@@ -1,5 +1,6 @@
 import type {youtube_v3} from '@googleapis/youtube'
 import type {GaxiosResponse} from 'googleapis-common'
+import {PartialVideo, chunkArray} from './utils2'
 
 /**
  * Calls the YouTube "Playlists: list" endpoint to get the playlist name.
@@ -89,6 +90,36 @@ export async function genPlaylistItems({
           responses,
         })
       : responses
+  }
+
+  return responses
+}
+
+/**
+ * Calls the YouTube "Videos: list" endpoint to get metadata for a list of
+ * videos given their ids.
+ *
+ * https://developers.google.com/youtube/v3/docs/videos/list
+ */
+export async function genVideosList({
+  yt,
+  partialVideosData,
+}: {
+  yt: youtube_v3.Youtube
+  partialVideosData: PartialVideo[]
+}): Promise<GaxiosResponse<youtube_v3.Schema$VideoListResponse>[]> {
+  const chunksOf50 = chunkArray(partialVideosData, 50)
+  const responses: GaxiosResponse<youtube_v3.Schema$VideoListResponse>[] = []
+
+  for (const chunk of chunksOf50) {
+    const response = await yt.videos.list({
+      // Required params.
+      id: chunk.map(item => item.id),
+      part: ['snippet', 'contentDetails'],
+      maxResults: 50,
+    })
+
+    responses.push(response)
   }
 
   return responses

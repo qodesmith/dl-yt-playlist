@@ -1,5 +1,9 @@
 import {DownloadType, PartialVideo, createFolders} from './utils2'
-import {genPlaylistItems, genPlaylistName} from './youtubeApiCalls2'
+import {
+  genPlaylistItems,
+  genPlaylistName,
+  genVideosList,
+} from './youtubeApiCalls2'
 import google from '@googleapis/youtube'
 
 export async function downloadYouTubePlaylist({
@@ -78,4 +82,6 @@ export async function downloadYouTubePlaylist({
     },
     []
   )
+
+  const videosListApiResponses = await genVideosList({yt, partialVideosData})
 }
