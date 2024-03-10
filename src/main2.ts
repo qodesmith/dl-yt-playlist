@@ -1,4 +1,4 @@
-import {DownloadType, createFolders} from './utils2'
+import {DownloadType, PartialVideo, createFolders} from './utils2'
 import {genPlaylistItems, genPlaylistName} from './youtubeApiCalls2'
 import google from '@googleapis/youtube'
 
@@ -53,5 +53,29 @@ export async function downloadYouTubePlaylist({
     fullData,
   })
 
-  playlistItemsApiResponses.map(item => {})
+  const partialVideosData = playlistItemsApiResponses.reduce<PartialVideo[]>(
+    (acc, response) => {
+      response.data.items?.forEach(item => {
+        const id = item.snippet?.resourceId?.videoId ?? ''
+        const partialVideo: PartialVideo = {
+          id,
+          title: item.snippet?.title ?? '',
+          channelId: item.snippet?.videoOwnerChannelId ?? '',
+          channelName: item.snippet?.videoOwnerChannelTitle ?? '',
+          dateAddedToPlaylist: item.snippet?.publishedAt ?? '',
+          thumbnaillUrl: item.snippet?.thumbnails?.maxres?.url ?? '',
+          url: `https://www.youtube.com/watch?v=${id}`,
+        }
+
+        if (item.snippet?.description === 'This video is unavailable.') {
+          partialVideo.isUnavailable = true
+        }
+
+        acc.push(partialVideo)
+      })
+
+      return acc
+    },
+    []
+  )
 }
