@@ -25,6 +25,8 @@ export function createFolders({
     audio: `${directory}/${playlistName}/audio`,
     video: `${directory}/${playlistName}/video`,
     thumbnails: `${directory}/${playlistName}/thumbnails`,
+    audioJson: `${directory}/${playlistName}/audio.json`,
+    videoJson: `${directory}/${playlistName}/video.json`,
   }
 
   createFolderSafely(folderNames.playlist)
@@ -128,4 +130,35 @@ export function parseISO8601Duration(
     seconds
 
   return totalSeconds
+}
+
+export async function genExistingVideosData({
+  folders,
+}: {
+  folders: ReturnType<typeof createFolders>
+}): Promise<{
+  existingAudioData: Record<string, Video>
+  existingVideoData: Record<string, Video>
+}> {
+  const [existingAudioData, existingVideoData] = await Promise.all([
+    genExistingVideoJson(folders.audioJson),
+    genExistingVideoJson(folders.videoJson),
+  ])
+
+  return {existingAudioData, existingVideoData}
+}
+
+async function genExistingVideoJson(
+  dir: string
+): Promise<Record<string, Video>> {
+  try {
+    const audioJsonRaw = JSON.parse(await Bun.file(`${dir}`).json()) as Video[]
+
+    return audioJsonRaw.reduce<Record<string, Video>>((acc, item) => {
+      acc[item.id] = item
+      return acc
+    }, {})
+  } catch {
+    return {}
+  }
 }

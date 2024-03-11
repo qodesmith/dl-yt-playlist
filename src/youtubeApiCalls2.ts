@@ -19,7 +19,7 @@ export async function genPlaylistName({
     part: ['snippet'],
   })
 
-  const playlistName = response.data?.items?.[0].snippet?.title
+  const playlistName = response.data?.items?.[0]?.snippet?.title
   if (!playlistName) throw new Error('Failed to fetch playlist name')
 
   return playlistName

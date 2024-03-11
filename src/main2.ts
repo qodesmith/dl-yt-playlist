@@ -4,6 +4,7 @@ import {
   createFolders,
   Video,
   parseISO8601Duration,
+  genExistingVideosData,
 } from './utils2'
 import {
   genPlaylistItems,
@@ -128,4 +129,56 @@ export async function downloadYouTubePlaylist({
     },
     []
   )
+
+  const {existingAudioData, existingVideoData} = await genExistingVideosData({
+    folders,
+  })
+
+  videosData.forEach(currentVideo => {
+    const {id} = currentVideo
+    const existingMp3Video = existingAudioData[id]
+    const existingMp4Video = existingVideoData[id]
+
+    // AUDIO - update or add the current data.
+    if (existingMp3Video) {
+      if (currentVideo.isUnavailable) {
+        /**
+         * YouTube is saying this video is unavailable - update just that field
+         * in our local data, retaining all other data that the YouTube API will
+         * no longer return to us.
+         */
+        existingMp3Video.isUnavailable = true
+      } else if (existingMp3Video.isUnavailable) {
+        /**
+         * If a previously unavailable video is now available, update our local
+         * data wholesale with the data from YouTube.
+         */
+        existingAudioData[id] = currentVideo
+      }
+    } else {
+      // This is a new video that we did not have in our local data - save it.
+      existingAudioData[id] = currentVideo
+    }
+
+    // VIDEO - update or add the current data.
+    if (existingMp4Video) {
+      if (currentVideo.isUnavailable) {
+        /**
+         * YouTube is saying this video is unavailable - update just that field
+         * in our local data, retaining all other data that the YouTube API will
+         * no longer return to us.
+         */
+        existingMp4Video.isUnavailable = true
+      } else if (existingMp4Video.isUnavailable) {
+        /**
+         * If a previously unavailable video is now available, update our local
+         * data wholesale with the data from YouTube.
+         */
+        existingVideoData[id] = currentVideo
+      }
+    } else {
+      // This is a new video that we did not have in our local data - save it.
+      existingVideoData[id] = currentVideo
+    }
+  })
 }
