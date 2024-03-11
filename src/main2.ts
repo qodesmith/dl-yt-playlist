@@ -54,19 +54,20 @@ export async function downloadYouTubePlaylist({
   }
 
   const yt = google.youtube({version: 'v3', auth: apiKey})
-  const playlistName = await genPlaylistName({yt, playlistId})
+  const [playlistName, playlistItemsApiResponses] = await Promise.all([
+    await genPlaylistName({yt, playlistId}),
+    await genPlaylistItems({
+      yt,
+      playlistId,
+      fullData,
+    }),
+  ])
 
   const folders = createFolders({
     directory,
     playlistName,
     downloadType,
     downloadThumbnails,
-  })
-
-  const playlistItemsApiResponses = await genPlaylistItems({
-    yt,
-    playlistId,
-    fullData,
   })
 
   const partialVideosData = playlistItemsApiResponses.reduce<PartialVideo[]>(
