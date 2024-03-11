@@ -1,4 +1,10 @@
-import {DownloadType, PartialVideo, createFolders} from './utils2'
+import {
+  DownloadType,
+  PartialVideo,
+  createFolders,
+  Video,
+  parseISO8601Duration,
+} from './utils2'
 import {
   genPlaylistItems,
   genPlaylistName,
@@ -49,7 +55,12 @@ export async function downloadYouTubePlaylist({
   const yt = google.youtube({version: 'v3', auth: apiKey})
   const playlistName = await genPlaylistName({yt, playlistId})
 
-  createFolders({directory, playlistName, downloadType, downloadThumbnails})
+  const folders = createFolders({
+    directory,
+    playlistName,
+    downloadType,
+    downloadThumbnails,
+  })
 
   const playlistItemsApiResponses = await genPlaylistItems({
     yt,
@@ -61,18 +72,28 @@ export async function downloadYouTubePlaylist({
     (acc, response) => {
       response.data.items?.forEach(item => {
         const id = item.snippet?.resourceId?.videoId ?? ''
+        const title = item.snippet?.title ?? ''
         const partialVideo: PartialVideo = {
           id,
-          title: item.snippet?.title ?? '',
+          title,
           channelId: item.snippet?.videoOwnerChannelId ?? '',
           channelName: item.snippet?.videoOwnerChannelTitle ?? '',
           dateAddedToPlaylist: item.snippet?.publishedAt ?? '',
           thumbnaillUrl: item.snippet?.thumbnails?.maxres?.url ?? '',
+          thumbnailPath: `${folders.thumbnails}/${id}.jpg`,
           url: `https://www.youtube.com/watch?v=${id}`,
         }
 
         if (item.snippet?.description === 'This video is unavailable.') {
           partialVideo.isUnavailable = true
+        }
+
+        if (downloadType === 'audio' || downloadType === 'both') {
+          partialVideo.mp3Path = `${folders.audio}/${title} [${id}].mp3`
+        }
+
+        if (downloadType === 'video' || downloadType === 'both') {
+          partialVideo.mp4Path = `${folders.video}/${title} [${id}].mp4`
         }
 
         acc.push(partialVideo)
@@ -84,4 +105,27 @@ export async function downloadYouTubePlaylist({
   )
 
   const videosListApiResponses = await genVideosList({yt, partialVideosData})
+
+  const videosData = videosListApiResponses.reduce<Video[]>(
+    (acc, response, i) => {
+      response.data.items?.forEach((item, j) => {
+        const partialIdx = i * 50 + j
+        const partialVideo = partialVideosData[partialIdx]
+
+        // This should never happen, but just in case.
+        if (!partialVideo) throw new Error('No partial video found')
+
+        acc.push({
+          ...partialVideo,
+          dateCreated: item.snippet?.publishedAt ?? '',
+          durationInSeconds: parseISO8601Duration(
+            item.contentDetails?.duration
+          ),
+        })
+      })
+
+      return acc
+    },
+    []
+  )
 }

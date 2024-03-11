@@ -40,6 +40,8 @@ export function createFolders({
   if (downloadThumbnails) {
     createFolderSafely(folderNames.thumbnails)
   }
+
+  return folderNames
 }
 
 function createFolderSafely(dir: string) {
@@ -48,7 +50,7 @@ function createFolderSafely(dir: string) {
   }
 }
 
-type Video = {
+export type Video = {
   // playlistResponse.data.items[number].snippet.resourceId.videoId
   id: string
 
@@ -63,7 +65,9 @@ type Video = {
 
   // playlistResponse.data.items[number].snippet.publishedAt
   dateAddedToPlaylist: string
-  durationInSeconds: string
+
+  // videosListResponse.data.items[number].contentDetails.duration
+  durationInSeconds: number | null
 
   /**
    * This value will be changed to `true` when future API calls are made and the
@@ -80,29 +84,48 @@ type Video = {
 
   // Absolute path to where the downloaded thumbnail jpg lives.
   thumbnailPath: string
+
+  // videosListResponse.data.items[number].snippet.publishedAt
   dateCreated: string
 
   // Absolute path to where the downloaded audio mp3 lives.
-  mp3Path?: string
+  mp3Path?: string | null
 
   // Absolute path to where the downloaded video mp4 lives.
-  mp4Path?: string
+  mp4Path?: string | null
 }
 
-export type PartialVideo = Pick<
-  Video,
-  | 'id'
-  | 'title'
-  | 'channelId'
-  | 'channelName'
-  | 'dateAddedToPlaylist'
-  | 'url'
-  | 'thumbnaillUrl'
-  | 'isUnavailable'
->
+export type PartialVideo = Omit<Video, 'durationInSeconds' | 'dateCreated'>
 
 export function chunkArray<T>(arr: T[], size: number): T[][] {
   return Array.from({length: Math.ceil(arr.length / size)}, (v, i) =>
     arr.slice(i * size, i * size + size)
   )
+}
+
+export function parseISO8601Duration(
+  durationString: string | undefined | null
+) {
+  if (!durationString) return null
+
+  const regex =
+    /^P(?:(\d+)Y)?(?:(\d+)M)?(?:(\d+)W)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d{1,3})?)S)?)?$/
+  const matches = durationString.match(regex) ?? []
+  const years = matches[1] ? parseInt(matches[1]) : 0
+  const months = matches[2] ? parseInt(matches[2]) : 0
+  const weeks = matches[3] ? parseInt(matches[3]) : 0
+  const days = matches[4] ? parseInt(matches[4]) : 0
+  const hours = matches[5] ? parseInt(matches[5]) : 0
+  const minutes = matches[6] ? parseInt(matches[6]) : 0
+  const seconds = matches[7] ? parseFloat(matches[7]) : 0
+  const totalSeconds =
+    years * 31536000 +
+    months * 2592000 +
+    weeks * 604800 +
+    days * 86400 +
+    hours * 3600 +
+    minutes * 60 +
+    seconds
+
+  return totalSeconds
 }
