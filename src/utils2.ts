@@ -9,7 +9,7 @@ export type DownloadType = 'audio' | 'video' | 'both'
  * - `{playlistName}/video`
  * - `{playlistName}/thumbnails`
  */
-export function createFolders({
+export function createPathData({
   directory,
   playlistName,
   downloadType,
@@ -29,24 +29,24 @@ export function createFolders({
     videoJson: `${directory}/${playlistName}/video.json`,
   }
 
-  createFolderSafely(folderNames.playlist)
+  createPathSafely(folderNames.playlist)
 
   if (downloadType === 'audio' || downloadType === 'both') {
-    createFolderSafely(folderNames.audio)
+    createPathSafely(folderNames.audio)
   }
 
   if (downloadType === 'video' || downloadType === 'both') {
-    createFolderSafely(folderNames.video)
+    createPathSafely(folderNames.video)
   }
 
   if (downloadThumbnails) {
-    createFolderSafely(folderNames.thumbnails)
+    createPathSafely(folderNames.thumbnails)
   }
 
   return folderNames
 }
 
-function createFolderSafely(dir: string) {
+function createPathSafely(dir: string) {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir)
   }
@@ -133,16 +133,16 @@ export function parseISO8601Duration(
 }
 
 export async function genExistingVideosData({
-  folders,
+  pathData,
 }: {
-  folders: ReturnType<typeof createFolders>
+  pathData: ReturnType<typeof createPathData>
 }): Promise<{
   existingAudioData: Record<string, Video>
   existingVideoData: Record<string, Video>
 }> {
   const [existingAudioData, existingVideoData] = await Promise.all([
-    genExistingVideoJson(folders.audioJson),
-    genExistingVideoJson(folders.videoJson),
+    genExistingVideoJson(pathData.audioJson),
+    genExistingVideoJson(pathData.videoJson),
   ])
 
   return {existingAudioData, existingVideoData}
@@ -176,15 +176,9 @@ export function updateLocalVideosData({
     const {id} = currentVideo
     const existingMp3Video = existingAudioData[id]
     const existingMp4Video = existingVideoData[id]
-    updateVideoData({
-      currentVideo,
-      existingVideo: existingMp3Video,
-      existingVideoData,
-    })
-    updateVideoData({
-      currentVideo,
-      existingVideo: existingMp4Video,
-      existingVideoData,
+
+    void [existingMp3Video, existingMp4Video].forEach(existingVideo => {
+      updateVideoData({currentVideo, existingVideo, existingVideoData})
     })
   })
 
