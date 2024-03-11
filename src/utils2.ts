@@ -162,3 +162,77 @@ async function genExistingVideoJson(
     return {}
   }
 }
+
+export function updateLocalVideosData({
+  videosData,
+  existingAudioData,
+  existingVideoData,
+}: {
+  videosData: Video[]
+  existingAudioData: Record<string, Video>
+  existingVideoData: Record<string, Video>
+}) {
+  videosData.forEach(currentVideo => {
+    const {id} = currentVideo
+    const existingMp3Video = existingAudioData[id]
+    const existingMp4Video = existingVideoData[id]
+    updateVideoData({
+      currentVideo,
+      existingVideo: existingMp3Video,
+      existingVideoData,
+    })
+    updateVideoData({
+      currentVideo,
+      existingVideo: existingMp4Video,
+      existingVideoData,
+    })
+  })
+
+  const newAudioData = Object.values(existingAudioData).sort((a, b) => {
+    const dateNum1 = +new Date(a.dateAddedToPlaylist)
+    const dateNum2 = +new Date(b.dateAddedToPlaylist)
+
+    return dateNum2 - dateNum1
+  })
+
+  const newVideoData = Object.values(existingVideoData).sort((a, b) => {
+    const dateNum1 = +new Date(a.dateAddedToPlaylist)
+    const dateNum2 = +new Date(b.dateAddedToPlaylist)
+
+    return dateNum2 - dateNum1
+  })
+
+  return {newAudioData, newVideoData}
+}
+
+function updateVideoData({
+  currentVideo,
+  existingVideo,
+  existingVideoData,
+}: {
+  currentVideo: Video
+  existingVideo: Video | undefined
+  existingVideoData: Record<string, Video>
+}) {
+  const {id} = currentVideo
+
+  if (existingVideo) {
+    if (currentVideo.isUnavailable) {
+      /**
+       * YouTube is saying this video is unavailable - update just that field
+       * in our local data, retaining all other data that the YouTube API will
+       * no longer return to us.
+       */
+      existingVideo.isUnavailable = true
+    } else if (existingVideo.isUnavailable) {
+      /**
+       * If a previously unavailable video is now available, update our local
+       * data wholesale with the data from YouTube.
+       */
+      existingVideoData[id] = currentVideo
+    }
+  } else {
+    // This is a new video that we did not have in our local data - save it.
+    existingVideoData[id] = currentVideo
+  }
+}
