@@ -41,14 +41,14 @@ export async function genPlaylistItems({
   playlistId,
   pageToken,
   maxResults = 50, // 50 is YouTube's maximum value.
-  fullData,
+  includeFullData,
   responses = [],
 }: {
   yt: youtube_v3.Youtube
   playlistId: string
   pageToken?: string
   maxResults?: number
-  fullData?: boolean
+  includeFullData?: boolean
   responses?: GaxiosResponse<youtube_v3.Schema$PlaylistItemListResponse>[]
 }): Promise<GaxiosResponse<youtube_v3.Schema$PlaylistItemListResponse>[]> {
   /**
@@ -79,14 +79,14 @@ export async function genPlaylistItems({
   const {nextPageToken} = response.data
   responses.push(response)
 
-  if (fullData) {
+  if (includeFullData) {
     return nextPageToken
       ? genPlaylistItems({
           yt,
           playlistId,
           pageToken: nextPageToken,
           maxResults,
-          fullData,
+          includeFullData,
           responses,
         })
       : responses

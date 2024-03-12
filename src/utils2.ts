@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 
-export type DownloadType = 'audio' | 'video' | 'both'
+export type DownloadType = 'audio' | 'video' | 'both' | 'none'
 
 /**
  * Creates a folder with the playlist name and a few sub-folders conditionlly:
@@ -20,30 +20,30 @@ export function createPathData({
   downloadType: DownloadType
   downloadThumbnails?: boolean
 }) {
-  const folderNames = {
+  const pathNames = {
     playlist: `${directory}/${playlistName}`,
     audio: `${directory}/${playlistName}/audio`,
     video: `${directory}/${playlistName}/video`,
     thumbnails: `${directory}/${playlistName}/thumbnails`,
     audioJson: `${directory}/${playlistName}/audio.json`,
     videoJson: `${directory}/${playlistName}/video.json`,
-  }
+  } as const
 
-  createPathSafely(folderNames.playlist)
+  createPathSafely(pathNames.playlist)
 
   if (downloadType === 'audio' || downloadType === 'both') {
-    createPathSafely(folderNames.audio)
+    createPathSafely(pathNames.audio)
   }
 
   if (downloadType === 'video' || downloadType === 'both') {
-    createPathSafely(folderNames.video)
+    createPathSafely(pathNames.video)
   }
 
   if (downloadThumbnails) {
-    createPathSafely(folderNames.thumbnails)
+    createPathSafely(pathNames.thumbnails)
   }
 
-  return folderNames
+  return pathNames
 }
 
 function createPathSafely(dir: string) {
@@ -91,10 +91,10 @@ export type Video = {
   dateCreated: string
 
   // Absolute path to where the downloaded audio mp3 lives.
-  mp3Path?: string | null
+  mp3Path: string | null
 
   // Absolute path to where the downloaded video mp4 lives.
-  mp4Path?: string | null
+  mp4Path: string | null
 }
 
 export type PartialVideo = Omit<Video, 'durationInSeconds' | 'dateCreated'>
@@ -133,17 +133,25 @@ export function parseISO8601Duration(
 }
 
 export async function genExistingVideosData({
-  pathData,
+  downloadType,
+  audioJsonPath,
+  videoJsonPath,
 }: {
-  pathData: ReturnType<typeof createPathData>
+  downloadType: DownloadType
+  audioJsonPath: ReturnType<typeof createPathData>['audioJson']
+  videoJsonPath: ReturnType<typeof createPathData>['videoJson']
 }): Promise<{
-  existingAudioData: Record<string, Video>
-  existingVideoData: Record<string, Video>
+  existingAudioData: Record<string, Video> | null
+  existingVideoData: Record<string, Video> | null
 }> {
-  const [existingAudioData, existingVideoData] = await Promise.all([
-    genExistingVideoJson(pathData.audioJson),
-    genExistingVideoJson(pathData.videoJson),
-  ])
+  const shouldProcessAudio = downloadType === 'audio' || downloadType === 'both'
+  const shouldProcessVideo = downloadType === 'video' || downloadType === 'both'
+  const existingAudioData = shouldProcessAudio
+    ? await genExistingVideoJson(audioJsonPath)
+    : null
+  const existingVideoData = shouldProcessVideo
+    ? await genExistingVideoJson(videoJsonPath)
+    : null
 
   return {existingAudioData, existingVideoData}
 }
@@ -152,13 +160,18 @@ async function genExistingVideoJson(
   dir: string
 ): Promise<Record<string, Video>> {
   try {
-    const audioJsonRaw = JSON.parse(await Bun.file(`${dir}`).json()) as Video[]
+    const json = (await Bun.file(`${dir}`).json()) as Video[]
 
-    return audioJsonRaw.reduce<Record<string, Video>>((acc, item) => {
-      acc[item.id] = item
+    return json.reduce<Record<string, Video>>((acc, video) => {
+      acc[video.id] = video
       return acc
     }, {})
   } catch {
+    /**
+     * Getting here means the file didn't exist. This is Bun's preferred way to
+     * read files - don't check if they exist, rather, use a try/catch to handle
+     * the exception.
+     */
     return {}
   }
 }
@@ -169,44 +182,56 @@ export function updateLocalVideosData({
   existingVideoData,
 }: {
   videosData: Video[]
-  existingAudioData: Record<string, Video>
-  existingVideoData: Record<string, Video>
+  existingAudioData: Record<string, Video> | null
+  existingVideoData: Record<string, Video> | null
 }) {
   videosData.forEach(currentVideo => {
     const {id} = currentVideo
-    const existingMp3Video = existingAudioData[id]
-    const existingMp4Video = existingVideoData[id]
+    const existingMp3Video = existingAudioData?.[id]
+    const existingMp4Video = existingVideoData?.[id]
 
-    void [existingMp3Video, existingMp4Video].forEach(existingVideo => {
-      updateVideoData({currentVideo, existingVideo, existingVideoData})
-    })
+    if (existingAudioData) {
+      updateVideoData({
+        currentVideo,
+        existingVideo: existingMp3Video,
+        existingData: existingAudioData,
+      })
+    }
+
+    if (existingVideoData) {
+      updateVideoData({
+        currentVideo,
+        existingVideo: existingMp4Video,
+        existingData: existingVideoData,
+      })
+    }
   })
 
-  const newAudioData = Object.values(existingAudioData).sort((a, b) => {
+  function sorter(a: Video, b: Video) {
     const dateNum1 = +new Date(a.dateAddedToPlaylist)
     const dateNum2 = +new Date(b.dateAddedToPlaylist)
 
     return dateNum2 - dateNum1
-  })
+  }
 
-  const newVideoData = Object.values(existingVideoData).sort((a, b) => {
-    const dateNum1 = +new Date(a.dateAddedToPlaylist)
-    const dateNum2 = +new Date(b.dateAddedToPlaylist)
-
-    return dateNum2 - dateNum1
-  })
-
-  return {newAudioData, newVideoData}
+  return {
+    newAudioData: existingAudioData
+      ? Object.values(existingAudioData).toSorted(sorter)
+      : null,
+    newVideoData: existingVideoData
+      ? Object.values(existingVideoData).toSorted(sorter)
+      : null,
+  }
 }
 
 function updateVideoData({
   currentVideo,
   existingVideo,
-  existingVideoData,
+  existingData,
 }: {
   currentVideo: Video
   existingVideo: Video | undefined
-  existingVideoData: Record<string, Video>
+  existingData: Record<string, Video>
 }) {
   const {id} = currentVideo
 
@@ -223,10 +248,10 @@ function updateVideoData({
        * If a previously unavailable video is now available, update our local
        * data wholesale with the data from YouTube.
        */
-      existingVideoData[id] = currentVideo
+      existingData[id] = currentVideo
     }
   } else {
     // This is a new video that we did not have in our local data - save it.
-    existingVideoData[id] = currentVideo
+    existingData[id] = currentVideo
   }
 }

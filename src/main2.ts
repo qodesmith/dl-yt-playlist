@@ -1,7 +1,7 @@
 import {
   DownloadType,
   PartialVideo,
-  createFolders,
+  createPathData,
   Video,
   parseISO8601Duration,
   genExistingVideosData,
@@ -18,19 +18,50 @@ export async function downloadYouTubePlaylist({
   playlistId,
   apiKey,
   directory,
-  fullData = false,
+  includeFullData = false,
   maxSecondsDuration = Infinity,
-  downloadData = true,
   downloadType = 'audio',
-  downloadThumbnails = true,
+  downloadThumbnails = false,
 }: {
+  // YouTube playlist id.
   playlistId: string
+
+  // YouTube API key.
   apiKey: string
+
+  // Full path to the directory you want to save your data.
   directory: string
-  fullData?: boolean
+
+  /**
+   * 'audio' - will only save videos as mp3 files and include json metadata
+   * 'video' - will only save videos as mp4 files and incluide json metadata
+   * 'both' - will save videos as mp3 and mp4 files and include json metadata
+   * 'none' - will only save json metadata
+   */
+  downloadType: DownloadType
+
+  /**
+   * Optional - default value `false`
+   *
+   * Boolean indicating if the full playlist data get's fetched or not.
+   *
+   * `true`  - download all items in the playlist
+   * `false` - download only the 50 most recent items in the playlist
+   */
+  includeFullData?: boolean
+
+  /**
+   * Optional - default value `Infinity`
+   *
+   * The maximum duration a playlist item can be to be downloaded.
+   */
   maxSecondsDuration?: number
-  downloadType?: DownloadType
-  downloadData?: boolean
+
+  /**
+   * Optional - default value `false`
+   *
+   * Boolean indicating whether to download the video thumbnails as jpg files.
+   */
   downloadThumbnails?: boolean
 }) {
   // First check if we have `yt-dlp` installed on the system.
@@ -60,11 +91,11 @@ export async function downloadYouTubePlaylist({
     await genPlaylistItems({
       yt,
       playlistId,
-      fullData,
+      includeFullData,
     }),
   ])
 
-  const folders = createFolders({
+  const pathData = createPathData({
     directory,
     playlistName,
     downloadType,
@@ -83,20 +114,19 @@ export async function downloadYouTubePlaylist({
           channelName: item.snippet?.videoOwnerChannelTitle ?? '',
           dateAddedToPlaylist: item.snippet?.publishedAt ?? '',
           thumbnaillUrl: item.snippet?.thumbnails?.maxres?.url ?? '',
-          thumbnailPath: `${folders.thumbnails}/${id}.jpg`,
+          thumbnailPath: `${pathData.thumbnails}/${id}.jpg`,
           url: `https://www.youtube.com/watch?v=${id}`,
+
+          /**
+           * The presence of these paths in the json does not indicate that
+           * these files have been downloaded.
+           */
+          mp3Path: `${pathData.audio}/${title} [${id}].mp3`,
+          mp4Path: `${pathData.video}/${title} [${id}].mp4`,
         }
 
         if (item.snippet?.description === 'This video is unavailable.') {
           partialVideo.isUnavailable = true
-        }
-
-        if (downloadType === 'audio' || downloadType === 'both') {
-          partialVideo.mp3Path = `${folders.audio}/${title} [${id}].mp3`
-        }
-
-        if (downloadType === 'video' || downloadType === 'both') {
-          partialVideo.mp4Path = `${folders.video}/${title} [${id}].mp4`
         }
 
         acc.push(partialVideo)
@@ -133,7 +163,9 @@ export async function downloadYouTubePlaylist({
   )
 
   const {existingAudioData, existingVideoData} = await genExistingVideosData({
-    folders,
+    downloadType,
+    audioJsonPath: pathData.audioJson,
+    videoJsonPath: pathData.videoJson,
   })
 
   const {newAudioData, newVideoData} = updateLocalVideosData({
@@ -141,4 +173,12 @@ export async function downloadYouTubePlaylist({
     existingAudioData,
     existingVideoData,
   })
+
+  if (newAudioData) {
+    await Bun.write(pathData.audioJson, JSON.stringify(newAudioData, null, 2))
+  }
+
+  if (newVideoData) {
+    await Bun.write(pathData.videoJson, JSON.stringify(newVideoData, null, 2))
+  }
 }
