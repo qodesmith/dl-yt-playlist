@@ -4,8 +4,9 @@ import {
   createPathData,
   Video,
   parseISO8601Duration,
-  genExistingVideosData,
+  genExistingData,
   updateLocalVideosData,
+  downloadVideo,
 } from './utils2'
 import {
   genPlaylistItems,
@@ -139,7 +140,7 @@ export async function downloadYouTubePlaylist({
 
   const videosListApiResponses = await genVideosList({yt, partialVideosData})
 
-  const videosData = videosListApiResponses.reduce<Video[]>(
+  const apiMetadata = videosListApiResponses.reduce<Video[]>(
     (acc, response, i) => {
       response.data.items?.forEach((item, j) => {
         const partialIdx = i * 50 + j
@@ -162,23 +163,19 @@ export async function downloadYouTubePlaylist({
     []
   )
 
-  const {existingAudioData, existingVideoData} = await genExistingVideosData({
-    downloadType,
-    audioJsonPath: pathData.audioJson,
-    videoJsonPath: pathData.videoJson,
+  const existingData = await genExistingData({
+    audioPath: pathData.audio,
+    videoPath: pathData.video,
   })
 
-  const {newAudioData, newVideoData} = updateLocalVideosData({
-    videosData,
-    existingAudioData,
-    existingVideoData,
+  const newData = updateLocalVideosData({
+    apiMetadata,
+    existingData,
   })
 
-  if (newAudioData) {
-    await Bun.write(pathData.audioJson, JSON.stringify(newAudioData, null, 2))
-  }
+  await Bun.write(pathData.json, JSON.stringify(newData, null, 2))
 
-  if (newVideoData) {
-    await Bun.write(pathData.videoJson, JSON.stringify(newVideoData, null, 2))
+  if (downloadType !== 'none') {
+    newData.slice(0, 2).forEach(video => downloadVideo({video, downloadType}))
   }
 }

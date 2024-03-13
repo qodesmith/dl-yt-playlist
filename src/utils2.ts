@@ -25,8 +25,7 @@ export function createPathData({
     audio: `${directory}/${playlistName}/audio`,
     video: `${directory}/${playlistName}/video`,
     thumbnails: `${directory}/${playlistName}/thumbnails`,
-    audioJson: `${directory}/${playlistName}/audio.json`,
-    videoJson: `${directory}/${playlistName}/video.json`,
+    json: `${directory}/${playlistName}/metadata.json`,
   } as const
 
   createPathSafely(pathNames.playlist)
@@ -132,37 +131,26 @@ export function parseISO8601Duration(
   return totalSeconds
 }
 
-export async function genExistingVideosData({
-  downloadType,
-  audioJsonPath,
-  videoJsonPath,
+export async function genExistingData({
+  audioPath,
+  videoPath,
 }: {
-  downloadType: DownloadType
-  audioJsonPath: ReturnType<typeof createPathData>['audioJson']
-  videoJsonPath: ReturnType<typeof createPathData>['videoJson']
-}): Promise<{
-  existingAudioData: Record<string, Video> | null
-  existingVideoData: Record<string, Video> | null
-}> {
-  const shouldProcessAudio = downloadType === 'audio' || downloadType === 'both'
-  const shouldProcessVideo = downloadType === 'video' || downloadType === 'both'
-  const existingAudioData = shouldProcessAudio
-    ? await genExistingVideoJson(audioJsonPath)
-    : null
-  const existingVideoData = shouldProcessVideo
-    ? await genExistingVideoJson(videoJsonPath)
-    : null
+  audioPath: ReturnType<typeof createPathData>['audio']
+  videoPath: ReturnType<typeof createPathData>['video']
+}): Promise<Record<string, Video>> {
+  const [existingAudioData, existingVideoData] = await Promise.all([
+    await genExistingDataObj(audioPath),
+    await genExistingDataObj(videoPath),
+  ])
 
-  return {existingAudioData, existingVideoData}
+  return {...existingAudioData, ...existingVideoData}
 }
 
-async function genExistingVideoJson(
-  dir: string
-): Promise<Record<string, Video>> {
+async function genExistingDataObj(dir: string): Promise<Record<string, Video>> {
   try {
-    const json = (await Bun.file(`${dir}`).json()) as Video[]
+    const dataArr = (await Bun.file(`${dir}`).json()) as Video[]
 
-    return json.reduce<Record<string, Video>>((acc, video) => {
+    return dataArr.reduce<Record<string, Video>>((acc, video) => {
       acc[video.id] = video
       return acc
     }, {})
@@ -177,51 +165,30 @@ async function genExistingVideoJson(
 }
 
 export function updateLocalVideosData({
-  videosData,
-  existingAudioData,
-  existingVideoData,
+  apiMetadata,
+  existingData,
 }: {
-  videosData: Video[]
-  existingAudioData: Record<string, Video> | null
-  existingVideoData: Record<string, Video> | null
+  apiMetadata: Video[]
+  existingData: Record<string, Video>
 }) {
-  videosData.forEach(currentVideo => {
+  // Update `existingData`.
+  apiMetadata.forEach(currentVideo => {
     const {id} = currentVideo
-    const existingMp3Video = existingAudioData?.[id]
-    const existingMp4Video = existingVideoData?.[id]
+    const existingVideo = existingData[id]
 
-    if (existingAudioData) {
-      updateVideoData({
-        currentVideo,
-        existingVideo: existingMp3Video,
-        existingData: existingAudioData,
-      })
-    }
-
-    if (existingVideoData) {
-      updateVideoData({
-        currentVideo,
-        existingVideo: existingMp4Video,
-        existingData: existingVideoData,
-      })
-    }
+    updateVideoData({currentVideo, existingVideo, existingData})
   })
 
-  function sorter(a: Video, b: Video) {
+  /**
+   * Return an array of the values in `existingData` sorted by date added to the
+   * playlist, descending.
+   */
+  return Object.values(existingData).toSorted((a, b) => {
     const dateNum1 = +new Date(a.dateAddedToPlaylist)
     const dateNum2 = +new Date(b.dateAddedToPlaylist)
 
     return dateNum2 - dateNum1
-  }
-
-  return {
-    newAudioData: existingAudioData
-      ? Object.values(existingAudioData).toSorted(sorter)
-      : null,
-    newVideoData: existingVideoData
-      ? Object.values(existingVideoData).toSorted(sorter)
-      : null,
-  }
+  })
 }
 
 function updateVideoData({
@@ -254,4 +221,31 @@ function updateVideoData({
     // This is a new video that we did not have in our local data - save it.
     existingData[id] = currentVideo
   }
+}
+
+export function downloadVideo({
+  video,
+  downloadType,
+}: {
+  video: Video
+  downloadType: DownloadType
+}) {
+  const mp4Template = `-o "${video.mp4Path}/%(title)s [%(id)s].%(ext)s" -f mp4`
+  const mp3Template = `-o "${video.mp3Path}/%(title)s [%(id)s].%(ext)s" --extract-audio --audio-format mp3 --audio-quality 0`
+  const template = (() => {
+    switch (downloadType) {
+      case 'audio':
+        return mp3Template
+      case 'video':
+        return mp4Template
+      case 'both':
+        return `${mp4Template} ${mp3Template}`
+      default:
+        throw new Error('Unable to create yt-dlp template')
+    }
+  })()
+  const command = `yt-dlp ${template} -- ${video.url}`
+
+  console.log(`Downloading ${video.title}`)
+  Bun.spawnSync([command])
 }
