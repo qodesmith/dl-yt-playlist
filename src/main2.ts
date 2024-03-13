@@ -115,15 +115,7 @@ export async function downloadYouTubePlaylist({
           channelName: item.snippet?.videoOwnerChannelTitle ?? '',
           dateAddedToPlaylist: item.snippet?.publishedAt ?? '',
           thumbnaillUrl: item.snippet?.thumbnails?.maxres?.url ?? '',
-          thumbnailPath: `${pathData.thumbnails}/${id}.jpg`,
           url: `https://www.youtube.com/watch?v=${id}`,
-
-          /**
-           * The presence of these paths in the json does not indicate that
-           * these files have been downloaded.
-           */
-          mp3Path: `${pathData.audio}/${title} [${id}].mp3`,
-          mp4Path: `${pathData.video}/${title} [${id}].mp4`,
         }
 
         if (item.snippet?.description === 'This video is unavailable.') {
@@ -176,6 +168,15 @@ export async function downloadYouTubePlaylist({
   await Bun.write(pathData.json, JSON.stringify(newData, null, 2))
 
   if (downloadType !== 'none') {
-    newData.slice(0, 2).forEach(video => downloadVideo({video, downloadType}))
+    newData.slice(0, 2).forEach(video => {
+      console.log(`${video.title} - downloading...`)
+      downloadVideo({
+        video,
+        downloadType,
+        audioPath: pathData.audio,
+        videoPath: pathData.video,
+      })
+      console.log(`${video.title} - complete!`)
+    })
   }
 }

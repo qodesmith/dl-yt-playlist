@@ -83,17 +83,8 @@ export type Video = {
   // playlistResponse.data.items[number].snippet.thumbnails.maxres.url
   thumbnaillUrl: string
 
-  // Absolute path to where the downloaded thumbnail jpg lives.
-  thumbnailPath: string
-
   // videosListResponse.data.items[number].snippet.publishedAt
   dateCreated: string
-
-  // Absolute path to where the downloaded audio mp3 lives.
-  mp3Path: string | null
-
-  // Absolute path to where the downloaded video mp4 lives.
-  mp4Path: string | null
 }
 
 export type PartialVideo = Omit<Video, 'durationInSeconds' | 'dateCreated'>
@@ -226,12 +217,16 @@ function updateVideoData({
 export function downloadVideo({
   video,
   downloadType,
+  audioPath,
+  videoPath,
 }: {
   video: Video
   downloadType: DownloadType
+  audioPath: string
+  videoPath: string
 }) {
-  const mp4Template = `-o "${video.mp4Path}/%(title)s [%(id)s].%(ext)s" -f mp4`
-  const mp3Template = `-o "${video.mp3Path}/%(title)s [%(id)s].%(ext)s" --extract-audio --audio-format mp3 --audio-quality 0`
+  const mp4Template = `-o "${videoPath}/%(title)s [%(id)s].%(ext)s" -f mp4`
+  const mp3Template = `-o "${audioPath}/%(title)s [%(id)s].%(ext)s" --extract-audio --audio-format mp3 --audio-quality 0`
   const template = (() => {
     switch (downloadType) {
       case 'audio':
