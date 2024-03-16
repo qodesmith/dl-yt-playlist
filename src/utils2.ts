@@ -1,4 +1,5 @@
 import fs from 'node:fs'
+import os from 'node:os'
 
 export type DownloadType = 'audio' | 'video' | 'both' | 'none'
 
@@ -122,46 +123,42 @@ export function parseISO8601Duration(
   return totalSeconds
 }
 
-export async function genExistingData({
-  audioPath,
-  videoPath,
-}: {
-  audioPath: ReturnType<typeof createPathData>['audio']
-  videoPath: ReturnType<typeof createPathData>['video']
-}): Promise<Record<string, Video>> {
-  const [existingAudioData, existingVideoData] = await Promise.all([
-    await genExistingDataObj(audioPath),
-    await genExistingDataObj(videoPath),
-  ])
-
-  return {...existingAudioData, ...existingVideoData}
-}
-
-async function genExistingDataObj(dir: string): Promise<Record<string, Video>> {
+export async function genExistingData(
+  metadataPath: ReturnType<typeof createPathData>['json']
+): Promise<Record<string, Video>> {
+  /**
+   * Bun's preferred way to read a file is to wrap it in a try/catch and handle
+   * the error. This allows us to skip checking if the file exists first, which
+   * is a slower and more costly process.
+   */
   try {
-    const dataArr = (await Bun.file(`${dir}`).json()) as Video[]
+    const dataArr = (await Bun.file(`${metadataPath}`).json()) as Video[]
 
     return dataArr.reduce<Record<string, Video>>((acc, video) => {
       acc[video.id] = video
       return acc
     }, {})
   } catch {
-    /**
-     * Getting here means the file didn't exist. This is Bun's preferred way to
-     * read files - don't check if they exist, rather, use a try/catch to handle
-     * the exception.
-     */
+    // Getting here means the file didn't exist.
     return {}
   }
 }
 
+/**
+ * This function will mutate `existingData` based upon what it finds in
+ * `apiMetadata`. The goal is to retain information we may have previously
+ * fetched from the YouTube API that is no longer available due to the video
+ * being deleted, private, etc.
+ *
+ * This function will return a new array sorted by `dateAddedToPlaylist`.
+ */
 export function updateLocalVideosData({
   apiMetadata,
   existingData,
 }: {
   apiMetadata: Video[]
   existingData: Record<string, Video>
-}) {
+}): Video[] {
   // Update `existingData`.
   apiMetadata.forEach(currentVideo => {
     const {id} = currentVideo
@@ -197,8 +194,8 @@ function updateVideoData({
     if (currentVideo.isUnavailable) {
       /**
        * YouTube is saying this video is unavailable - update just that field
-       * in our local data, retaining all other data that the YouTube API will
-       * no longer return to us.
+       * in our local data, retaining all other data we have, since YouTube will
+       * no longer give it to us.
        */
       existingVideo.isUnavailable = true
     } else if (existingVideo.isUnavailable) {
@@ -214,6 +211,49 @@ function updateVideoData({
   }
 }
 
+export function ffmpegCreateAudioFile({
+  audioPath,
+  videoPath,
+  video,
+}: {
+  audioPath: string
+  videoPath: string
+  video: Video
+}) {
+  const videoFilePath = `${videoPath}/${video.title} [${video.id}].mp4`
+  const audioFilePath = `${audioPath}/${video.title} [${video.id}].mp3`
+  const cmd = [
+    'ffmpeg',
+    '-i',
+    videoFilePath,
+    '-vn',
+    '-acodec',
+    'libmp3lame',
+    '-q:a',
+    '0',
+    audioFilePath,
+  ]
+
+  return new Promise<void>((resolve, reject) => {
+    Bun.spawn({
+      cmd,
+      onExit(subprocess, exitCode, signalCode, error) {
+        if (error || exitCode !== 0) {
+          reject({
+            exitCode,
+            signalCode,
+            error,
+            command: cmd.join(' '),
+          })
+        } else {
+          resolve()
+        }
+      },
+      stdio: ['ignore', 'ignore', 'ignore'],
+    })
+  })
+}
+
 export function downloadVideo({
   video,
   downloadType,
@@ -225,22 +265,104 @@ export function downloadVideo({
   audioPath: string
   videoPath: string
 }) {
-  const mp4Template = `-o "${videoPath}/%(title)s [%(id)s].%(ext)s" -f mp4`
-  const mp3Template = `-o "${audioPath}/%(title)s [%(id)s].%(ext)s" --extract-audio --audio-format mp3 --audio-quality 0`
+  /**
+   * Video titles may have special characters in them, but the JSON data
+   * doesn't. We use the JSON data (`video.title`) instead of the yt-dlp
+   * placeholder (`%(title)s`) to prevent poluting file names.
+   */
+  const audioTemplate = [
+    '-o',
+    `${audioPath}/${video.title} [%(id)s].%(ext)s`,
+    '--extract-audio',
+    '--audio-format=mp3',
+    '--audio-quality=0',
+  ]
+  const videoTemplate = [
+    '-o',
+    `${videoPath}/${video.title} [%(id)s].%(ext)s`,
+    '--format=mp4',
+  ]
+
   const template = (() => {
     switch (downloadType) {
       case 'audio':
-        return mp3Template
+        return audioTemplate
       case 'video':
-        return mp4Template
       case 'both':
-        return `${mp4Template} ${mp3Template}`
+        return videoTemplate
       default:
+        // We should never get here.
         throw new Error('Unable to create yt-dlp template')
     }
   })()
-  const command = `yt-dlp ${template} -- ${video.url}`
 
-  console.log(`Downloading ${video.title}`)
-  Bun.spawnSync([command])
+  return new Promise<void>((resolve, reject) => {
+    const cmd = ['yt-dlp', ...template, video.url]
+
+    Bun.spawn({
+      cmd,
+      onExit(subprocess, exitCode, signalCode, error) {
+        if (error || exitCode !== 0) {
+          reject({
+            exitCode,
+            signalCode,
+            error,
+            command: cmd.join(' '),
+          })
+        } else {
+          resolve()
+        }
+      },
+      stdio: ['ignore', 'ignore', 'ignore'],
+    })
+  })
+}
+
+export async function downloadAllThumbnails({
+  videos,
+  directory,
+}: {
+  videos: Video[]
+  directory: ReturnType<typeof createPathData>['thumbnails']
+}) {
+  const totalCores = os.cpus().length
+  const loadAvgOneMinute = os.loadavg()[0] ?? 0
+  const availableCores = Math.floor(totalCores - loadAvgOneMinute)
+  const promiseFxns = videos.map(({thumbnaillUrl, id}) => {
+    return async () => {
+      return downloadThumbnail({url: thumbnaillUrl, directory, id})
+    }
+  })
+  const promiseFxnChunks = chunkArray(promiseFxns, availableCores)
+
+  return promiseFxnChunks.reduce((promise, promiseArr) => {
+    return (
+      promise
+        .then(() => Promise.all(promiseArr.map(fxn => fxn())))
+        /**
+         * The extra empty `.then` is to satisfy TypeScript because we're not
+         * returning an array of things from `Promise.all(...)`, rather, we're
+         * returning a single `Promise<void>`.
+         */
+        .then(() => {})
+    )
+  }, Promise.resolve())
+}
+
+async function downloadThumbnail({
+  url,
+  id,
+  directory,
+}: {
+  url: string
+  id: string
+  directory: ReturnType<typeof createPathData>['thumbnails']
+}) {
+  try {
+    const res = await fetch(url)
+    const buffer = await res.arrayBuffer()
+    await Bun.write(`${directory}/${id}.jpg`, buffer)
+  } catch {
+    console.log(`❌ Failed to download thumbnail (${id}) - ${url}`)
+  }
 }
