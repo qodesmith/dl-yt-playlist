@@ -1,5 +1,4 @@
 import fs from 'node:fs'
-import os from 'node:os'
 import https from 'node:https'
 import sanitizeFilename from 'sanitize-filename'
 
@@ -328,16 +327,18 @@ export function downloadVideo({
   })
 }
 
-export async function downloadAllThumbnails({
+/**
+ * This function exists just so we can know how many thumbnails need to be
+ * downloaded before actually downloading them. This will help determine some
+ * console.log messages.
+ */
+export function getThumbnailsToBeDownloaded({
   videos,
   directory,
 }: {
   videos: Video[]
   directory: ReturnType<typeof createPathData>['thumbnails']
-}) {
-  const totalCores = os.cpus().length
-  const loadAvgOneMinute = os.loadavg()[0] ?? 0
-  const availableCores = Math.floor(totalCores - loadAvgOneMinute)
+}): Video[] {
   const thumbnailSet = new Set(
     fs.readdirSync(directory).reduce<string[]>((acc, str) => {
       if (str.endsWith('.jpg')) {
@@ -347,36 +348,16 @@ export async function downloadAllThumbnails({
       return acc
     }, [])
   )
-  const promiseFxns = videos.reduce<
-    (() => ReturnType<typeof downloadThumbnail>)[]
-  >((acc, {thumbnaillUrl, id}) => {
-    if (!thumbnailSet.has(id)) {
-      acc.push(async () => {
-        return downloadThumbnail({url: thumbnaillUrl, directory, id})
-      })
+  return videos.reduce<Video[]>((acc, video) => {
+    if (!thumbnailSet.has(video.id)) {
+      acc.push(video)
     }
 
     return acc
   }, [])
-  const promiseFxnChunks = chunkArray(promiseFxns, availableCores)
-
-  console.log('THUMBNAISL TO DL', promiseFxns.length)
-
-  return promiseFxnChunks.reduce((promise, promiseArr) => {
-    return (
-      promise
-        .then(() => Promise.all(promiseArr.map(fxn => fxn())))
-        /**
-         * The extra empty `.then` is to satisfy TypeScript because we're not
-         * returning an array of things from `Promise.all(...)`, rather, we're
-         * returning a single `Promise<void>`.
-         */
-        .then(() => {})
-    )
-  }, Promise.resolve())
 }
 
-async function downloadThumbnail({
+export async function downloadThumbnailFile({
   url,
   id,
   directory,
@@ -385,13 +366,9 @@ async function downloadThumbnail({
   id: string
   directory: ReturnType<typeof createPathData>['thumbnails']
 }) {
-  try {
-    const res = await fetch(url)
-    const buffer = await res.arrayBuffer()
-    await Bun.write(`${directory}/${id}.jpg`, buffer)
-  } catch {
-    console.log(`❌ Failed to download thumbnail (${id}) - ${url}`)
-  }
+  const res = await fetch(url)
+  const buffer = await res.arrayBuffer()
+  await Bun.write(`${directory}/${id}.jpg`, buffer)
 }
 
 export function getExistingIds({
@@ -453,4 +430,22 @@ export async function genIsOnline() {
       .get('https://google.com', () => resolve(true))
       .on('error', () => resolve(false))
   })
+}
+
+export function sanitizeTime(ms: number) {
+  // Calculate total seconds.
+  const totalSeconds = ms / 1000
+
+  // Calculate minutes and seconds.
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = (totalSeconds % 60).toFixed(2) // Round to 2 decimal places.
+
+  return minutes
+    ? `${pluralize(minutes, 'minute')} ${seconds} seconds`
+    : `${seconds} seconds`
+}
+
+function pluralize(amount: number, word: string) {
+  const s = amount === 1 ? '' : 's'
+  return `${amount} ${word}${s}`
 }

@@ -8,10 +8,13 @@ import {
   updateLocalVideosData,
   downloadVideo,
   ffmpegCreateAudioFile,
-  downloadAllThumbnails,
   sanitizeTitle,
   getExistingIds,
   genIsOnline,
+  getThumbnailsToBeDownloaded,
+  chunkArray,
+  downloadThumbnailFile,
+  sanitizeTime,
 } from './utils2'
 import {
   genPlaylistItems,
@@ -99,7 +102,7 @@ export async function downloadYouTubePlaylist({
   const isOnline = await genIsOnline()
 
   if (!isOnline) {
-    return console.log('Please connect to the internet and try again.')
+    return console.log('🛜 Please connect to the internet and try again.')
   }
 
   ////////////////////////////////////////////////////////////
@@ -108,6 +111,8 @@ export async function downloadYouTubePlaylist({
   // with partial metadata for each video.                  //
   ////////////////////////////////////////////////////////////
 
+  console.log('💻 Fetching playlist data from the YouTube API...')
+  const start1 = performance.now()
   const yt = google.youtube({version: 'v3', auth: apiKey})
   const [playlistName, playlistItemsApiResponses] = await Promise.all([
     await genPlaylistName({yt, playlistId}),
@@ -117,6 +122,10 @@ export async function downloadYouTubePlaylist({
       includeFullData,
     }),
   ])
+
+  const time1 = sanitizeTime(performance.now() - start1)
+  const fetchCount1 = playlistItemsApiResponses.length + 1
+  console.log(`✅ ${fetchCount1} fetch calls completed in ${time1}!`)
 
   ///////////////////////////////////////////////////////////////////////
   // STEP 3:                                                           //
@@ -170,7 +179,15 @@ export async function downloadYouTubePlaylist({
   // massaging it into a format we will use.                             //
   /////////////////////////////////////////////////////////////////////////
 
+  console.log('\n💻 Fetching video data from the YouTube API...')
+
+  const start2 = performance.now()
   const videosListApiResponses = await genVideosList({yt, partialVideosData})
+  const time2 = sanitizeTime(performance.now() - start2)
+
+  const fetchCount2 = videosListApiResponses.length
+  console.log(`✅ ${fetchCount2} fetch calls completed in ${time2}!`)
+
   const apiMetadata = videosListApiResponses.reduce<Video[]>(
     (acc, response, i) => {
       response.data.items?.forEach((item, j) => {
@@ -201,12 +218,19 @@ export async function downloadYouTubePlaylist({
   // This reconciled data is saved locally as a json file.                    //
   //////////////////////////////////////////////////////////////////////////////
 
+  console.log('\n💾 Reconciling the data & saving as `metadata.json`...')
+  const start3 = performance.now()
   const existingData = await genExistingData(pathData.json)
   const newData = updateLocalVideosData({apiMetadata, existingData})
   await Bun.write(pathData.json, JSON.stringify(newData, null, 2))
 
+  const time3 = (performance.now() - start3).toFixed(2)
+  console.log(`✅ Data processed in ${time3} ms!`)
+
   if (downloadType === 'none' && !downloadThumbnails) {
-    return console.log('Only `metadata.json` written, no files downloaded.')
+    return console.log(
+      '\n💾 Only `metadata.json` written, no files downloaded.'
+    )
   }
 
   /////////////////////////
@@ -238,16 +262,19 @@ export async function downloadYouTubePlaylist({
   const totalCount = videosToDownload.length
 
   if (downloadType !== 'none') {
-    if (!totalCount) {
-      console.log('All videos accounted for!')
+    if (totalCount) {
+      console.log('\n💻 Downloading Videos...')
+    } else {
+      console.log('\n😎 All videos already accounted for!')
     }
 
+    const start = performance.now()
+
     for (let i = 0; i < totalCount; i++) {
-      const count = i + 1
       const video = videosToDownload[i] as Video
 
       try {
-        console.log(`${count} ${video.title} - downloading...`)
+        console.log(`(${i + 1} of ${totalCount}) Downloading ${video.title}...`)
 
         // Trigger the download.
         await downloadVideo({video, downloadType, audioPath, videoPath})
@@ -257,24 +284,47 @@ export async function downloadYouTubePlaylist({
           await ffmpegCreateAudioFile({audioPath, videoPath, video})
         }
       } catch (e) {
-        console.log(e)
+        console.log(`(${i + 1} of ${totalCount}) ❌ Failed to download`)
       }
     }
+
+    const time = sanitizeTime(performance.now() - start)
+    console.log(`✅ Videos downloaded in ${time}!`)
   }
 
   if (downloadThumbnails) {
-    console.log('\nDownloading thumbnails...')
-
-    await downloadAllThumbnails({
-      /**
-       * We use `newData` instead of the already-filtered `videosToDownload`
-       * because we want `downloadAllThumbnails` to compare against the full
-       * list of videos and download all missing thumbnails.
-       */
-      videos: newData.slice(0, 2), // TODO - remove slice!
+    const videosNeedingThumbnails = getThumbnailsToBeDownloaded({
+      videos: videosToDownload.slice(0, 2), // TODO - remove slice!,
       directory: pathData.thumbnails,
     })
 
-    console.log('Thumbnails downloaded!')
+    if (videosNeedingThumbnails.length) {
+      const thumbnailChunks = chunkArray(videosNeedingThumbnails, 4)
+      const start = performance.now()
+      console.log('\n💻 Downloading thumbnails...')
+
+      for (let i = 0; i < thumbnailChunks.length; i++) {
+        const chunks = thumbnailChunks[i] as Video[]
+        const count = `(${i + 1} of ${thumbnailChunks.length})`
+        console.log(`${count} Downloading batch of thumbnails...`)
+
+        await Promise.all(
+          chunks.map(({url, id}) => {
+            return downloadThumbnailFile({
+              url,
+              id,
+              directory: pathData.thumbnails,
+            }).catch(() => {
+              console.log(`❌ Failed to download thumbnail (${id}) - ${url}`)
+            })
+          })
+        )
+      }
+
+      const time = sanitizeTime(performance.now() - start)
+      console.log(`✅ Thumbnails downloaded in ${time}!`)
+    } else {
+      console.log('\n😎 All thumbnails already accounted for!')
+    }
   }
 }
