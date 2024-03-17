@@ -4,7 +4,7 @@
   "main": "./dist/main.js",
   "type": "module",
   "types": "./dist/main.d.ts",
-  "version": "3.2.0",
+  "version": "4.0.0",
   "publishConfig": {
     "access": "public"
   },
@@ -30,15 +30,13 @@
   },
   "homepage": "https://github.com/qodesmith/dl-yt-playlist#readme",
   "dependencies": {
-    "@googleapis/youtube": "^11.0.1",
-    "minimist": "^1.2.8"
+    "@googleapis/youtube": "^14.0.0",
+    "minimist": "^1.2.8",
+    "sanitize-filename": "^1.6.3"
   },
   "devDependencies": {
-    "@types/minimist": "^1.2.2",
+    "@types/minimist": "^1.2.5",
     "bun-plugin-dts": "^0.2.1",
     "bun-types": "latest"
-  },
-  "peerDependencies": {
-    "typescript": "^5.0.0"
   }
 }
