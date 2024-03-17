@@ -196,7 +196,7 @@ export async function downloadYouTubePlaylist({
   const newData = updateLocalVideosData({apiMetadata, existingData})
   await Bun.write(pathData.json, JSON.stringify(newData, null, 2))
 
-  if (downloadType === 'none') {
+  if (downloadType === 'none' && !downloadThumbnails) {
     return console.log('Only `metadata.json` written, no files downloaded.')
   }
 
@@ -212,27 +212,31 @@ export async function downloadYouTubePlaylist({
     .slice(0, 2) // REMOVE ME
   const totalCount = videosToDownload.length
 
-  for (let i = 0; i < totalCount; i++) {
-    const count = i + 1
-    const video = videosToDownload[i] as Video
+  if (downloadType !== 'none') {
+    for (let i = 0; i < totalCount; i++) {
+      const count = i + 1
+      const video = videosToDownload[i] as Video
 
-    try {
-      console.log(`${count} ${video.title} - downloading...`)
+      try {
+        console.log(`${count} ${video.title} - downloading...`)
 
-      // Trigger the download.
-      await downloadVideo({video, downloadType, audioPath, videoPath})
+        // Trigger the download.
+        await downloadVideo({video, downloadType, audioPath, videoPath})
 
-      // Extract the audio file.
-      if (downloadType === 'both') {
-        await ffmpegCreateAudioFile({audioPath, videoPath, video})
+        // Extract the audio file.
+        if (downloadType === 'both') {
+          await ffmpegCreateAudioFile({audioPath, videoPath, video})
+        }
+      } catch (e) {
+        console.log(e)
       }
-    } catch (e) {
-      console.log(e)
     }
   }
 
+  console.log('\n Downloading thumbnails...')
   await downloadAllThumbnails({
     videos: videosToDownload,
     directory: pathData.thumbnails,
   })
+  console.log('Complete!')
 }
