@@ -1,6 +1,6 @@
 import type {youtube_v3} from '@googleapis/youtube'
 import type {GaxiosResponse} from 'googleapis-common'
-import {PartialVideo, chunkArray} from './utils2'
+import {PartialVideo, chunkArray} from './utils'
 
 /**
  * Calls the YouTube "Playlists: list" endpoint to get the playlist name.

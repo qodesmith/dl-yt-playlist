@@ -1,134 +1,105 @@
-import {youtube_v3} from '@googleapis/youtube'
-import {execSync} from 'child_process'
 import fs from 'node:fs'
-import type {PageData} from './youtubeApiCalls'
+import https from 'node:https'
+import sanitizeFilename from 'sanitize-filename'
 
-type VideoDateData = {
-  dateAddedToPlaylist: string
-  dateCreated: string | null
-}
-
-export type VideoIdAndDates = Record<string, VideoDateData>
+export type DownloadType = 'audio' | 'video' | 'both' | 'none'
 
 /**
- * Returns an object where the keys are video ids and the values are the dates
- * those videos were added to the playlist.
+ * Creates a folder with the playlist name and a few sub-folders conditionlly:
+ *
+ * - `{playlistName}/audio`
+ * - `{playlistName}/video`
+ * - `{playlistName}/thumbnails`
  */
-export function getVideoIdsAndDatesAddedFromPlaylistResponse(playlistResponse: {
-  data: youtube_v3.Schema$PlaylistItemListResponse
-}): VideoIdAndDates {
-  if (!playlistResponse.data.items) {
-    throw new Error('Missing playlistResponse.data.items')
+export function createPathData({
+  directory,
+  playlistName,
+  downloadType,
+  downloadThumbnails,
+}: {
+  directory: string
+  playlistName: string
+  downloadType: DownloadType
+  downloadThumbnails?: boolean
+}) {
+  const pathNames = {
+    playlist: `${directory}/${playlistName}`,
+    audio: `${directory}/${playlistName}/audio`,
+    video: `${directory}/${playlistName}/video`,
+    thumbnails: `${directory}/${playlistName}/thumbnails`,
+    json: `${directory}/${playlistName}/metadata.json`,
+  } as const
+
+  createPathSafely(pathNames.playlist)
+
+  if (downloadType === 'audio' || downloadType === 'both') {
+    createPathSafely(pathNames.audio)
   }
 
-  return playlistResponse.data.items.reduce<VideoIdAndDates>(
-    (acc, {contentDetails, snippet}) => {
-      if (!contentDetails?.videoId) {
-        throw new Error('`contentDetails.videoId` missing from playlist item')
-      }
+  if (downloadType === 'video' || downloadType === 'both') {
+    createPathSafely(pathNames.video)
+  }
 
-      // Date added to playlist.
-      if (!snippet?.publishedAt) {
-        throw new Error('`snippet.publishedAt` missing from playlist item')
-      }
+  if (downloadThumbnails) {
+    createPathSafely(pathNames.thumbnails)
+  }
 
-      acc[contentDetails.videoId] = {
-        // If this is missing, it is because the video is private or deleted.
-        dateCreated: contentDetails.videoPublishedAt ?? null,
-        dateAddedToPlaylist: snippet.publishedAt,
-      }
-
-      return acc
-    },
-    {}
-  )
+  return pathNames
 }
 
-type GetUnavailableVideoPlaylistItemIdsInput = Pick<
-  PageData,
-  'playlistResponse' | 'videosResponse'
->
-
-export function getUnavailableVideoPlaylistItemIds({
-  playlistResponse,
-  videosResponse,
-}: GetUnavailableVideoPlaylistItemIdsInput): string[] {
-  const playlistItems = playlistResponse.data.items ?? []
-  const videoItems = videosResponse.data.items ?? []
-  const videosResponseIdSet = new Set(videoItems.map(({id}) => id))
-
-  /**
-   * Missing videos are calculated by diff'ing the id's from the
-   * playlistResponse (which contain all videos, even those deleted or removed)
-   * and the id's from the videosResponse, which only contains available videos.
-   */
-  return playlistItems.reduce<string[]>((acc, {contentDetails}) => {
-    const {videoId} = contentDetails ?? {}
-
-    if (videoId && !videosResponseIdSet.has(videoId)) {
-      acc.push(videoId)
-    }
-
-    return acc
-  }, [])
+function createPathSafely(dir: string) {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir)
+  }
 }
 
 export type Video = {
+  // playlistResponse.data.items[number].snippet.resourceId.videoId
   id: string
+
+  // playlistResponse.data.items[number].snippet.title
   title: string
-  channel: string
-  dateCreated: VideoDateData['dateCreated']
-  dateAddedToPlaylist: VideoDateData['dateAddedToPlaylist']
+
+  // playlistResponse.data.items[number].snippet.videoOwnerChannelId
+  channelId: string
+
+  // playlistResponse.data.items[number].snippet.videoOwnerChannelTitle
+  channelName: string
+
+  // playlistResponse.data.items[number].snippet.publishedAt
+  dateAddedToPlaylist: string
+
+  // videosListResponse.data.items[number].contentDetails.duration
+  durationInSeconds: number | null
+
+  /**
+   * This value will be changed to `true` when future API calls are made and the
+   * video is found to be unavailable. This will allow us to retain previously
+   * fetch metadata.
+   */
+  isUnavailable?: boolean
+
+  // This gets constructed based on the id - https://youtube.com/watch?v=${id}
   url: string
-  lengthInSeconds: number
+
+  // playlistResponse.data.items[number].snippet.thumbnails.maxres.url
+  thumbnaillUrl: string
+
+  // videosListResponse.data.items[number].snippet.publishedAt
+  dateCreated: string
 }
 
-/**
- * Notes about the metadata:
- * - The audio bitrate is only available to the video owner
- * - dateAddedToPlaylist - calculated from `playlistMetaData.snippet.publishedAt`
- * - publishedAt - date the video was published (`item.snippet.publishedAt`)
- * - lengthInSeconds - `item.contentDetails.duration` - the format is IS0 8601 duration
- */
-export function getVideoMetadata(allPages: PageData[]): Video[] {
-  return allPages
-    .reduce((acc: Video[], {videosResponse, videoIdsAndDates}) => {
-      videosResponse.data.items?.forEach(item => {
-        const {id} = item
-        if (!id) return acc
+export type PartialVideo = Omit<Video, 'durationInSeconds' | 'dateCreated'>
 
-        const {dateAddedToPlaylist, dateCreated} = videoIdsAndDates[id]
-        const {channelTitle: channel, title} = item.snippet ?? {}
-        const url = `https://www.youtube.com/watch?v=${id}`
-        const lengthInSeconds = parseISO8601Duration(
-          item.contentDetails?.duration
-        )
-
-        if (!id || !title || !channel || lengthInSeconds === null) {
-          throw new Error('Property missing from video')
-        }
-
-        acc.push({
-          id,
-          title,
-          channel,
-          dateCreated,
-          dateAddedToPlaylist,
-          url,
-          lengthInSeconds,
-        })
-      })
-
-      return acc
-    }, [])
-    .sort((a, b) => {
-      if (a.dateAddedToPlaylist < b.dateAddedToPlaylist) return 1
-      if (a.dateAddedToPlaylist > b.dateAddedToPlaylist) return -1
-      return 0
-    })
+export function chunkArray<T>(arr: T[], size: number): T[][] {
+  return Array.from({length: Math.ceil(arr.length / size)}, (v, i) =>
+    arr.slice(i * size, i * size + size)
+  )
 }
 
-function parseISO8601Duration(durationString: string | undefined | null) {
+export function parseISO8601Duration(
+  durationString: string | undefined | null
+) {
   if (!durationString) return null
 
   const regex =
@@ -153,294 +124,328 @@ function parseISO8601Duration(durationString: string | undefined | null) {
   return totalSeconds
 }
 
+export async function genExistingData(
+  metadataPath: ReturnType<typeof createPathData>['json']
+): Promise<Record<string, Video>> {
+  /**
+   * Bun's preferred way to read a file is to wrap it in a try/catch and handle
+   * the error. This allows us to skip checking if the file exists first, which
+   * is a slower and more costly process.
+   */
+  try {
+    const dataArr = (await Bun.file(`${metadataPath}`).json()) as Video[]
+
+    return dataArr.reduce<Record<string, Video>>((acc, video) => {
+      acc[video.id] = video
+      return acc
+    }, {})
+  } catch {
+    // Getting here means the file didn't exist.
+    return {}
+  }
+}
+
 /**
- * Download a YouTube video as an mp3 file using the `yt-dlp` command line
- * package. You can conveniently install it with `brew install yt-dlp`.
+ * This function will mutate `existingData` based upon what it finds in
+ * `apiMetadata`. The goal is to retain information we may have previously
+ * fetched from the YouTube API that is no longer available due to the video
+ * being deleted, private, etc.
+ *
+ * This function will return a new array sorted by `dateAddedToPlaylist`.
  */
-async function downloadVideo({
-  videoUrl,
-  playlistName,
-  audioOnly,
-  directory,
+export function updateLocalVideosData({
+  apiMetadata,
+  existingData,
 }: {
-  videoUrl: string
-  playlistName: string
-  audioOnly: boolean | undefined
-  directory: string
-}): Promise<void> {
-  return new Promise((resolve, reject) => {
-    /**
-     * https://github.com/yt-dlp/yt-dlp#output-template
-     * This is Python syntax and the trailing 's' after the parenthesis
-     * indicates the preceding value is a string.
-     *
-     * https://www.perplexity.ai/search/fb927e12-6b12-4fac-b33d-363c760661ca?s=u
-     * Prefer `title` over `fulltitle`
-     */
-    const subFolder = audioOnly ? 'audio' : 'video'
-    const template = `-o '${directory}/${playlistName}/${subFolder}/%(title)s [%(id)s].%(ext)s'`
-    const options = audioOnly
-      ? '--extract-audio --audio-format mp3 --audio-quality 0'
-      : '-f mp4'
+  apiMetadata: Video[]
+  existingData: Record<string, Video>
+}): Video[] {
+  // Update `existingData`.
+  apiMetadata.forEach(currentVideo => {
+    const {id} = currentVideo
+    const existingVideo = existingData[id]
 
-    // https://github.com/yt-dlp/yt-dlp
-    const command = `yt-dlp ${template} ${options} -- ${videoUrl}`
+    updateVideoData({currentVideo, existingVideo, existingData})
+  })
 
-    /**
-     * Exec doesn't seem to call its callback function when the command is done:
-     * exec(command, error => error ? reject(error) : resolve())
-     *
-     * An internet search reveals that if the process doesn't print to stdout,
-     * it's possible the callback will never be called. Avoiding all that with
-     * `execSync`.
-     */
-    try {
-      execSync(command)
-      resolve()
-    } catch (error) {
-      reject(error)
+  /**
+   * Return an array of the values in `existingData` sorted by date added to the
+   * playlist, descending.
+   */
+  return Object.values(existingData).toSorted((a, b) => {
+    const dateNum1 = +new Date(a.dateAddedToPlaylist)
+    const dateNum2 = +new Date(b.dateAddedToPlaylist)
+
+    return dateNum2 - dateNum1
+  })
+}
+
+function updateVideoData({
+  currentVideo,
+  existingVideo,
+  existingData,
+}: {
+  currentVideo: Video
+  existingVideo: Video | undefined
+  existingData: Record<string, Video>
+}) {
+  const {id} = currentVideo
+
+  if (existingVideo) {
+    if (currentVideo.isUnavailable) {
+      /**
+       * YouTube is saying this video is unavailable - update just that field
+       * in our local data, retaining all other data we have, since YouTube will
+       * no longer give it to us.
+       */
+      existingVideo.isUnavailable = true
+    } else if (existingVideo.isUnavailable) {
+      /**
+       * If a previously unavailable video is now available, update our local
+       * data wholesale with the data from YouTube.
+       */
+      existingData[id] = currentVideo
     }
+  } else {
+    // This is a new video that we did not have in our local data - save it.
+    existingData[id] = currentVideo
+  }
+}
+
+export function ffmpegCreateAudioFile({
+  audioPath,
+  videoPath,
+  video,
+}: {
+  audioPath: string
+  videoPath: string
+  video: Video
+}) {
+  const videoFilePath = `${videoPath}/${video.title} [${video.id}].mp4`
+  const audioFilePath = `${audioPath}/${video.title} [${video.id}].mp3`
+  const cmd = [
+    'ffmpeg',
+    '-i',
+    videoFilePath,
+    '-vn',
+    '-acodec',
+    'libmp3lame',
+    '-q:a',
+    '0',
+    audioFilePath,
+  ]
+
+  return new Promise<void>((resolve, reject) => {
+    Bun.spawn({
+      cmd,
+      onExit(subprocess, exitCode, signalCode, error) {
+        if (error || exitCode !== 0) {
+          reject({
+            exitCode,
+            signalCode,
+            error,
+            command: cmd.join(' '),
+          })
+        } else {
+          resolve()
+        }
+      },
+      stdio: ['ignore', 'ignore', 'ignore'],
+    })
+  })
+}
+
+export function sanitizeTitle(str: string): string {
+  const safeTitle = sanitizeFilename(str, {replacement: ' '})
+
+  // Use a regular expression to replace consecutive spaces with a single space.
+  return safeTitle.replace(/\s+/g, ' ')
+}
+
+export function downloadVideo({
+  video,
+  downloadType,
+  audioPath,
+  videoPath,
+}: {
+  video: Video
+  downloadType: DownloadType
+  audioPath: string
+  videoPath: string
+}) {
+  /**
+   * Video titles may have special characters in them, but the JSON data
+   * doesn't. We use the JSON data (`video.title`) instead of the yt-dlp
+   * placeholder (`%(title)s`) to prevent poluting file names.
+   */
+  const {title, url} = video
+  const audioTemplate = [
+    '-o',
+    `${audioPath}/${title} [%(id)s].%(ext)s`,
+    '--extract-audio',
+    '--audio-format=mp3',
+    '--audio-quality=0',
+  ]
+  const videoTemplate = [
+    '-o',
+    `${videoPath}/${title} [%(id)s].%(ext)s`,
+    '--format=mp4',
+  ]
+
+  const template = (() => {
+    switch (downloadType) {
+      case 'audio':
+        return audioTemplate
+      case 'video':
+      case 'both':
+        return videoTemplate
+      default:
+        // We should never get here.
+        throw new Error('Unable to create yt-dlp template')
+    }
+  })()
+
+  return new Promise<void>((resolve, reject) => {
+    const cmd = ['yt-dlp', ...template, url]
+
+    Bun.spawn({
+      cmd,
+      onExit(subprocess, exitCode, signalCode, error) {
+        if (error || exitCode !== 0) {
+          reject({
+            exitCode,
+            signalCode,
+            error,
+            command: cmd.join(' '),
+          })
+        } else {
+          resolve()
+        }
+      },
+      stdio: ['ignore', 'ignore', 'ignore'],
+    })
   })
 }
 
 /**
- * Download all YouTube videos as mp3 files using the `yt-dlp` command line
- * package.
+ * This function exists just so we can know how many thumbnails need to be
+ * downloaded before actually downloading them. This will help determine some
+ * console.log messages.
  */
-export async function downloadAllVideos({
+export function getThumbnailsToBeDownloaded({
   videos,
-  existingIds,
-  maxLengthInSeconds,
-  playlistName,
-  audioOnly,
   directory,
 }: {
   videos: Video[]
-  existingIds: Set<string>
-  maxLengthInSeconds: number
-  playlistName: string
-  audioOnly: boolean
-  directory: string
-}): Promise<ResultsMetadata> {
-  // Avoid fetching and creating audio we already have.
-  const videosToProcess = videos.filter(({id, lengthInSeconds}) => {
-    return !existingIds.has(id) && lengthInSeconds <= maxLengthInSeconds
-  })
-  const totalVideoCount = videosToProcess.length
-  const failures: Failure[] = []
-
-  if (!totalVideoCount) {
-    console.log('😎 All videos already accounted for')
-    return getResultsMetadata({
-      failures,
-      totalVideosDownloaded: totalVideoCount,
-    })
-  }
-
-  const promiseFxns = videosToProcess.map(({title, url}, i) => {
-    const counter = `(${i + 1} of ${totalVideoCount})`
-
-    return async () => {
-      console.log(`${counter} Downloading ${title}...`)
-
-      return downloadVideo({videoUrl: url, playlistName, audioOnly, directory})
-        .then(() => {
-          console.log(`${counter} ✅ Success!`)
-        })
-        .catch((error: unknown) => {
-          failures.push({url, title, error})
-          console.log(`${counter} ❌ Failed to download`)
-        })
-    }
-  })
-
-  return promiseFxns
-    .reduce((acc, fxn) => acc.then(fxn), Promise.resolve())
-    .then(() =>
-      getResultsMetadata({failures, totalVideosDownloaded: totalVideoCount})
-    )
-}
-
-type Failure = {url: string; title: string; error: unknown}
-
-export type ResultsMetadata = {
-  failures: Failure[]
-  failureCount: number
-  date: string
-  dateNum: number
-  totalVideosDownloaded: number
-  totalThumbnailsDownloaded: number
-}
-
-export function getResultsMetadata({
-  failures = [],
-  totalVideosDownloaded = 0,
-  totalThumbnailsDownloaded = 0,
-}: {
-  failures?: Failure[]
-  totalVideosDownloaded?: number
-  totalThumbnailsDownloaded?: number
-} = {}): ResultsMetadata {
-  const date = new Date()
-
-  return {
-    failures: failures.map(({error, ...failure}) => ({
-      error: `${error}`,
-      ...failure,
-    })),
-    failureCount: failures.length,
-    date: date.toLocaleString(),
-    dateNum: +date,
-    totalVideosDownloaded,
-    totalThumbnailsDownloaded,
-  }
-}
-
-/**
- * This regex pattern matches a square bracket followed by one or more
- * alphanumeric characters or the special characters `-` and `_`, followed
- * by a closing square bracket. The .\w+$ part matches the file extension
- * and ensures that the match is at the end of the file name.
- *
- * Here's a step-by-step explanation of the regex pattern:
- * 1. `\[` - Matches a literal opening square bracket
- * 2. `(` - Starts a capturing group
- * 3. `[a-zA-Z0-9_-]` - Matches any alphanumeric character or the special characters `-` and `_`
- * 4. `+` - Matches one or more of the preceding characters
- * 5. `)` - Ends the capturing group
- * 6. `\]` - Matches a literal closing square bracket
- * 7. `\.` - Matches a literal dot
- * 8. `\w+` - Matches one or more word characters (i.e., the file extension)
- * 9. `$` - Matches the end of the string
- *
- * Thanks to perplexity.ai for generating this regex!
- */
-export const squareBracketIdRegex = /\[([a-zA-Z0-9_-]+)\]\.\w+$/
-
-/**
- * Reads the './data/audio' folder, iterates through all the files, and pulls
- * out the YouTube id from each file. Returns a set of the ids.
- *
- * File format is: `<title> [<id>].mp3`
- */
-export function getExistingVideoIds({
-  playlistName,
-  audioOnly,
-  directory,
-}: {
-  playlistName: string
-  audioOnly: boolean
-  directory: string
-}): Set<string> {
-  const subFolder = audioOnly ? 'audio' : 'video'
-  const existingFileNames = fs.readdirSync(
-    `${directory}/${playlistName}/${subFolder}`
-  )
-
-  return existingFileNames.reduce((acc, fileName) => {
-    // 'Video Title [123-_abc123].mp3' => '123-_abc123'
-    const id = fileName.match(squareBracketIdRegex)?.[1]
-    if (id) acc.add(id)
-
-    return acc
-  }, new Set<string>())
-}
-
-function chunkArray<T>(arr: T[], size: number): T[][] {
-  return Array.from({length: Math.ceil(arr.length / size)}, (v, i) =>
-    arr.slice(i * size, i * size + size)
-  )
-}
-
-/**
- * Iterates through `responses.json` to aggregate the highest resolution of all
- * video thumbnails and downloads them.
- */
-export async function downloadAllThumbnails({
-  fullData,
-  directory,
-  resultsMetadata,
-}: {
-  fullData: PageData[]
-  directory: string
-  resultsMetadata: ResultsMetadata
-}) {
-  const thumbnailFailures: Failure[] = []
-  const existingThumbnailSet = new Set(
-    fs.readdirSync(directory).reduce<string[]>((acc, fileName) => {
-      if (fileName.endsWith('.jpg')) acc.push(fileName.slice(0, -4))
+  directory: ReturnType<typeof createPathData>['thumbnails']
+}): Video[] {
+  const thumbnailSet = new Set(
+    fs.readdirSync(directory).reduce<string[]>((acc, str) => {
+      if (str.endsWith('.jpg')) {
+        const id = str.split('.')[0] as string
+        acc.push(id)
+      }
       return acc
     }, [])
   )
-  const allThumbnailUrls = fullData.reduce<
-    {url: string; id: string; title: string}[]
-  >((acc, responseItem) => {
-    responseItem.playlistResponse.data.items?.forEach(item => {
-      const thumbnailData = item.snippet?.thumbnails ?? {}
-      const title = item.snippet?.title ?? ''
-      const id = item.contentDetails?.videoId
-
-      // Skip files we already have downloaded.
-      if (id && existingThumbnailSet.has(id)) return
-
-      const thumbnailUrl = (() => {
-        // https://developers.google.com/youtube/v3/docs/playlistItems#resource
-        const resolutions: (keyof typeof thumbnailData)[] = [
-          'maxres',
-          'high',
-          'standard',
-          'medium',
-          'default',
-        ]
-
-        for (const resolution of resolutions) {
-          const obj = thumbnailData[resolution]
-          if (obj) return obj.url
-        }
-      })()
-
-      if (id && thumbnailUrl) acc.push({id, url: thumbnailUrl, title})
-    })
+  return videos.reduce<Video[]>((acc, video) => {
+    if (!thumbnailSet.has(video.id)) {
+      acc.push(video)
+    }
 
     return acc
   }, [])
-  const promiseFxns = allThumbnailUrls.map(({url, id, title}) => {
-    return async () => {
-      try {
-        const res = await fetch(url)
-        const buffer = await res.arrayBuffer()
-        await Bun.write(`${directory}/${id}.jpg`, buffer)
-      } catch (error) {
-        thumbnailFailures.push({url, title, error})
-        console.log(`❌ Failed to download thumbnail (${id}) - ${url}`)
-      }
-    }
-  })
-  const chunkSize = 4
-  const promiseFxnChunks = chunkArray(promiseFxns, chunkSize)
-  const chunkCount = promiseFxnChunks.length
+}
 
+export async function downloadThumbnailFile({
+  url,
+  id,
+  directory,
+}: {
+  url: string
+  id: string
+  directory: ReturnType<typeof createPathData>['thumbnails']
+}) {
+  const res = await fetch(url)
+  const buffer = await res.arrayBuffer()
+  await Bun.write(`${directory}/${id}.jpg`, buffer)
+}
+
+export function getExistingIds({
+  downloadType,
+  audioPath,
+  videoPath,
+}: {
+  downloadType: DownloadType
+  audioPath: ReturnType<typeof createPathData>['audio']
+  videoPath: ReturnType<typeof createPathData>['video']
+}): {audioIdSet: Set<string>; videoIdSet: Set<string>} {
+  return {
+    audioIdSet:
+      downloadType === 'both' || downloadType === 'audio'
+        ? getExistingVideoIdsSet(audioPath)
+        : new Set(),
+    videoIdSet:
+      downloadType === 'both' || downloadType === 'video'
+        ? getExistingVideoIdsSet(videoPath)
+        : new Set(),
+  }
+}
+
+function getExistingVideoIdsSet(
+  directory: ReturnType<typeof createPathData>['audio' | 'video']
+): Set<string> {
   /**
-   * Trigger the promises sequentially in batches and wait for all of them to
-   * finish.
+   * This regex pattern matches a square bracket followed by one or more
+   * alphanumeric characters or the special characters `-` and `_`, followed
+   * by a closing square bracket. The .\w+$ part matches the file extension
+   * and ensures that the match is at the end of the file name.
+   *
+   * Here's a step-by-step explanation of the regex pattern:
+   * 1. `\[` - Matches a literal opening square bracket
+   * 2. `(` - Starts a capturing group
+   * 3. `[a-zA-Z0-9_-]` - Matches any alphanumeric character or the special characters `-` and `_`
+   * 4. `+` - Matches one or more of the preceding characters
+   * 5. `)` - Ends the capturing group
+   * 6. `\]` - Matches a literal closing square bracket
+   * 7. `\.` - Matches a literal dot
+   * 8. `\w+` - Matches one or more word characters (i.e., the file extension)
+   * 9. `$` - Matches the end of the string
+   *
+   * Thanks to perplexity.ai for generating this regex!
    */
-  await promiseFxnChunks.reduce((accPromise, promiseFxnsArr, i) => {
-    const counter = `(${i + 1} of ${chunkCount})`
+  const squareBracketIdRegex = /\[([a-zA-Z0-9_-]+)\]\.\w+$/
 
-    return accPromise.then(() => {
-      console.log(`${counter} Downloading thumbnail batch of ${chunkSize}...`)
+  return fs.readdirSync(directory).reduce((set, fileName) => {
+    const id = fileName.match(squareBracketIdRegex)?.[1]
+    if (id) set.add(id)
 
-      const promises = promiseFxnsArr.map(fxn => fxn())
-      return Promise.all(promises).then(() => {
-        console.log(`${i + 1} of ${chunkCount} ✅ Success!`)
-      })
-    })
-  }, Promise.resolve())
+    return set
+  }, new Set<string>())
+}
 
-  return getResultsMetadata({
-    failures: resultsMetadata.failures.concat(thumbnailFailures),
-    totalVideosDownloaded: resultsMetadata.totalVideosDownloaded,
-    totalThumbnailsDownloaded:
-      allThumbnailUrls.length - thumbnailFailures.length,
+export async function genIsOnline() {
+  return new Promise(resolve => {
+    https
+      .get('https://google.com', () => resolve(true))
+      .on('error', () => resolve(false))
   })
+}
+
+export function sanitizeTime(ms: number) {
+  // Calculate total seconds.
+  const totalSeconds = ms / 1000
+
+  // Calculate minutes and seconds.
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = (totalSeconds % 60).toFixed(2) // Round to 2 decimal places.
+
+  return minutes
+    ? `${pluralize(minutes, 'minute')} ${seconds} seconds`
+    : `${seconds} seconds`
+}
+
+function pluralize(amount: number, word: string) {
+  const s = amount === 1 ? '' : 's'
+  return `${amount} ${word}${s}`
 }
