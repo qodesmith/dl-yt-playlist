@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import os from 'node:os'
+import https from 'node:https'
 import sanitizeFilename from 'sanitize-filename'
 
 export type DownloadType = 'audio' | 'video' | 'both' | 'none'
@@ -337,12 +338,29 @@ export async function downloadAllThumbnails({
   const totalCores = os.cpus().length
   const loadAvgOneMinute = os.loadavg()[0] ?? 0
   const availableCores = Math.floor(totalCores - loadAvgOneMinute)
-  const promiseFxns = videos.map(({thumbnaillUrl, id}) => {
-    return async () => {
-      return downloadThumbnail({url: thumbnaillUrl, directory, id})
+  const thumbnailSet = new Set(
+    fs.readdirSync(directory).reduce<string[]>((acc, str) => {
+      if (str.endsWith('.jpg')) {
+        const id = str.split('.')[0] as string
+        acc.push(id)
+      }
+      return acc
+    }, [])
+  )
+  const promiseFxns = videos.reduce<
+    (() => ReturnType<typeof downloadThumbnail>)[]
+  >((acc, {thumbnaillUrl, id}) => {
+    if (!thumbnailSet.has(id)) {
+      acc.push(async () => {
+        return downloadThumbnail({url: thumbnaillUrl, directory, id})
+      })
     }
-  })
+
+    return acc
+  }, [])
   const promiseFxnChunks = chunkArray(promiseFxns, availableCores)
+
+  console.log('THUMBNAISL TO DL', promiseFxns.length)
 
   return promiseFxnChunks.reduce((promise, promiseArr) => {
     return (
@@ -374,4 +392,65 @@ async function downloadThumbnail({
   } catch {
     console.log(`❌ Failed to download thumbnail (${id}) - ${url}`)
   }
+}
+
+export function getExistingIds({
+  downloadType,
+  audioPath,
+  videoPath,
+}: {
+  downloadType: DownloadType
+  audioPath: ReturnType<typeof createPathData>['audio']
+  videoPath: ReturnType<typeof createPathData>['video']
+}): {audioIdSet: Set<string>; videoIdSet: Set<string>} {
+  return {
+    audioIdSet:
+      downloadType === 'both' || downloadType === 'audio'
+        ? getExistingVideoIdsSet(audioPath)
+        : new Set(),
+    videoIdSet:
+      downloadType === 'both' || downloadType === 'video'
+        ? getExistingVideoIdsSet(videoPath)
+        : new Set(),
+  }
+}
+
+function getExistingVideoIdsSet(
+  directory: ReturnType<typeof createPathData>['audio' | 'video']
+): Set<string> {
+  /**
+   * This regex pattern matches a square bracket followed by one or more
+   * alphanumeric characters or the special characters `-` and `_`, followed
+   * by a closing square bracket. The .\w+$ part matches the file extension
+   * and ensures that the match is at the end of the file name.
+   *
+   * Here's a step-by-step explanation of the regex pattern:
+   * 1. `\[` - Matches a literal opening square bracket
+   * 2. `(` - Starts a capturing group
+   * 3. `[a-zA-Z0-9_-]` - Matches any alphanumeric character or the special characters `-` and `_`
+   * 4. `+` - Matches one or more of the preceding characters
+   * 5. `)` - Ends the capturing group
+   * 6. `\]` - Matches a literal closing square bracket
+   * 7. `\.` - Matches a literal dot
+   * 8. `\w+` - Matches one or more word characters (i.e., the file extension)
+   * 9. `$` - Matches the end of the string
+   *
+   * Thanks to perplexity.ai for generating this regex!
+   */
+  const squareBracketIdRegex = /\[([a-zA-Z0-9_-]+)\]\.\w+$/
+
+  return fs.readdirSync(directory).reduce((set, fileName) => {
+    const id = fileName.match(squareBracketIdRegex)?.[1]
+    if (id) set.add(id)
+
+    return set
+  }, new Set<string>())
+}
+
+export async function genIsOnline() {
+  return new Promise(resolve => {
+    https
+      .get('https://google.com', () => resolve(true))
+      .on('error', () => resolve(false))
+  })
 }

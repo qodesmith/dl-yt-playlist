@@ -10,6 +10,8 @@ import {
   ffmpegCreateAudioFile,
   downloadAllThumbnails,
   sanitizeTitle,
+  getExistingIds,
+  genIsOnline,
 } from './utils2'
 import {
   genPlaylistItems,
@@ -92,6 +94,12 @@ export async function downloadYouTubePlaylist({
       'Please head to https://github.com/yt-dlp/yt-dlp for download instructions.'
     )
     process.exit(1)
+  }
+
+  const isOnline = await genIsOnline()
+
+  if (!isOnline) {
+    return console.log('Please connect to the internet and try again.')
   }
 
   ////////////////////////////////////////////////////////////
@@ -206,14 +214,34 @@ export async function downloadYouTubePlaylist({
   // It's download time! //
   /////////////////////////
 
+  const {audioIdSet, videoIdSet} = getExistingIds({
+    downloadType,
+    audioPath,
+    videoPath,
+  })
+
   const videosToDownload = newData
-    .filter(({durationInSeconds}) => {
-      return (durationInSeconds ?? 0) <= maxDurationSeconds
+    .slice(0, 2) // TODO - remove slice!
+    .filter(({durationInSeconds, id}) => {
+      const isValidDuration = (durationInSeconds ?? 0) <= maxDurationSeconds
+      if (!isValidDuration) return false
+
+      switch (downloadType) {
+        case 'audio':
+          return !audioIdSet.has(id)
+        case 'video':
+          return !videoIdSet.has(id)
+        case 'both':
+          return !audioIdSet.has(id) && !videoIdSet.has(id)
+      }
     })
-    .slice(0, 2) // REMOVE ME
   const totalCount = videosToDownload.length
 
   if (downloadType !== 'none') {
+    if (!totalCount) {
+      console.log('All videos accounted for!')
+    }
+
     for (let i = 0; i < totalCount; i++) {
       const count = i + 1
       const video = videosToDownload[i] as Video
@@ -234,10 +262,19 @@ export async function downloadYouTubePlaylist({
     }
   }
 
-  console.log('\n Downloading thumbnails...')
-  await downloadAllThumbnails({
-    videos: videosToDownload,
-    directory: pathData.thumbnails,
-  })
-  console.log('Complete!')
+  if (downloadThumbnails) {
+    console.log('\nDownloading thumbnails...')
+
+    await downloadAllThumbnails({
+      /**
+       * We use `newData` instead of the already-filtered `videosToDownload`
+       * because we want `downloadAllThumbnails` to compare against the full
+       * list of videos and download all missing thumbnails.
+       */
+      videos: newData.slice(0, 2), // TODO - remove slice!
+      directory: pathData.thumbnails,
+    })
+
+    console.log('Thumbnails downloaded!')
+  }
 }
