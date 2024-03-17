@@ -9,6 +9,7 @@ import {
   downloadVideo,
   ffmpegCreateAudioFile,
   downloadAllThumbnails,
+  sanitizeTitle,
 } from './utils2'
 import {
   genPlaylistItems,
@@ -132,7 +133,7 @@ export async function downloadYouTubePlaylist({
     (acc, response) => {
       response.data.items?.forEach(item => {
         const id = item.snippet?.resourceId?.videoId ?? ''
-        const title = item.snippet?.title ?? ''
+        const title = sanitizeTitle(item.snippet?.title ?? '')
         const partialVideo: PartialVideo = {
           id,
           title,

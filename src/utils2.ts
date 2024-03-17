@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import os from 'node:os'
+import sanitizeFilename from 'sanitize-filename'
 
 export type DownloadType = 'audio' | 'video' | 'both' | 'none'
 
@@ -254,6 +255,13 @@ export function ffmpegCreateAudioFile({
   })
 }
 
+export function sanitizeTitle(str: string): string {
+  const safeTitle = sanitizeFilename(str, {replacement: ' '})
+
+  // Use a regular expression to replace consecutive spaces with a single space.
+  return safeTitle.replace(/\s+/g, ' ')
+}
+
 export function downloadVideo({
   video,
   downloadType,
@@ -270,16 +278,17 @@ export function downloadVideo({
    * doesn't. We use the JSON data (`video.title`) instead of the yt-dlp
    * placeholder (`%(title)s`) to prevent poluting file names.
    */
+  const {title, url} = video
   const audioTemplate = [
     '-o',
-    `${audioPath}/${video.title} [%(id)s].%(ext)s`,
+    `${audioPath}/${title} [%(id)s].%(ext)s`,
     '--extract-audio',
     '--audio-format=mp3',
     '--audio-quality=0',
   ]
   const videoTemplate = [
     '-o',
-    `${videoPath}/${video.title} [%(id)s].%(ext)s`,
+    `${videoPath}/${title} [%(id)s].%(ext)s`,
     '--format=mp4',
   ]
 
@@ -297,7 +306,7 @@ export function downloadVideo({
   })()
 
   return new Promise<void>((resolve, reject) => {
-    const cmd = ['yt-dlp', ...template, video.url]
+    const cmd = ['yt-dlp', ...template, url]
 
     Bun.spawn({
       cmd,
