@@ -12,7 +12,7 @@
     "audio": "bun downloadYoutubePlaylist.ts --audioOnly",
     "video": "bun downloadYoutubePlaylist.ts",
     "build": "bun build.ts",
-    "publish": "npm run build && npm publish"
+    "publishPackage": "npm run build && npm publish"
   },
   "description": "Download all videos (or audio only) from a YouTube playlist!",
   "repository": {
