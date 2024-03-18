@@ -1,6 +1,6 @@
 # Download YouTube Playlist
 
-Download all YouTube videos (or audio only) from every video in a playlist!
+Download all videos from a YouTube playlist. You can optionally download the audio and thumbnail images as well.
 
 ## Prerequisites
 
@@ -12,32 +12,69 @@ You'll need a few things to use this project:
 
 ## Usage
 
-Say you have this code in a file named `download.ts`:
+The type signature looks like this:
 
 ```typescript
-import {downloadYoutubePlaylist} from 'dl-yt-playlist'
+downloadYoutubePlaylist({
+  // YouTube playlist id.
+  playlistId: string
 
-const {playlistId, apiKey} = process.env
+  // YouTube API key.
+  apiKey: string
 
-const resultsMetadata = await downloadYoutubePlaylist({
-  // Required:
-  playlistId: <string>, // The YouTube playlist id
-  apiKey: <string>, // Your YouTube Data api key
-  directory: <string>, // The full path where you want to save everything
+  // Full path to the directory you want to save your data.
+  directory: string
 
-  // Optional:
-  audioOnly: <boolean>, // `true` for audio MP3, `false` for video MP4 (default `false`)
-  getFullData: <boolean>, // `false` will only get the 1st 50 videos (default `false`)
-  maxLengthInSeconds: <number>, // Videos longer than this will be skipped (default `Infinity`)
-  downloadData: <boolean>, // `true` downloads the YouTube videos (default `true`)
-  downloadThumbnails: <boolean>, // `true` downloads jpg thumbnail files (default `true`)
-})
-```
+  /**
+   * 'audio' - will only save videos as mp3 files and include json metadata
+   * 'video' - will only save videos as mp4 files and incluide json metadata
+   * 'both' - will save videos as mp3 and mp4 files and include json metadata
+   * 'none' - will only save json metadata
+   */
+  downloadType: DownloadType
 
-Now you can use [Bun](https://bun.sh/) to run the file:
+  /**
+   * Optional - default value `false`
+   *
+   * Boolean indicating if the full playlist data get's fetched or not.
+   *
+   * `true`  - download all items in the playlist
+   * `false` - download only the 50 most recent items in the playlist
+   */
+  includeFullData?: boolean
 
-```bash
-bun run download.ts
+  /**
+   * Optional - default value `Infinity`
+   *
+   * The maximum duration a playlist item can be to be downloaded.
+   */
+  maxDurationSeconds?: number
+
+  /**
+   * Optional - default value `false`
+   *
+   * Boolean indicating whether to download the video thumbnails as jpg files.
+   */
+  downloadThumbnails?: boolean
+}): Promise<{
+  failures: {
+    url: string // The url of failed resource.
+    title: string // The video title.
+    error: unknown
+
+    /**
+     * 'video' - the attempted download was a YouTube video.
+     * 'thumbnail' - the attempted download was a thumbnail image.
+     * 'ffmpeg' - ffmpeg failed to convert the downloaded video into an mp3 file.
+     */
+    type: 'video' | 'thumbnail' | 'ffmpeg'
+  }
+  failureCount: number
+  date: string // new Date().toLocaleDateString()
+  dateNum: number // Date.now()
+  totalVideosDownloaded: number
+  totalThumbnailsDownloaded: number
+}>
 ```
 
 ## Folder Structure
@@ -49,12 +86,14 @@ data
   /<playlist name>
     /video
       <title> [<video id>].mp4
+      ...
     /audio
       <title> [<video id>].mp3
+      ...
     /thumbnails
       <video id>.jpg
-    responses.json
-    videoMetadata.json
+      ...
+    metadata.json
 ```
 
 <table>
@@ -71,27 +110,32 @@ data
     <td>This folder will contain all the jpg thumbnail files</td>
   </tr>
   <tr>
-    <td><code>responses.json</code></td>
-    <td>This file will contain <em>all</em> the responses from the YouTube api. This is useful for understanding the shape of the data.</td>
-  </tr>
-  <tr>
-    <td><code>videoMetadata.json</code></td>
-    <td>This file will contain an array metadata on each video. See shape below</td>
+    <td><code>metadata.json</code></td>
+    <td>This file will contain an array of metadata on each video. See shape below</td>
   </tr>
 </table>
 
-## Video Metadata Shape
+## Metadata Shape
 
-Each video will have metadata stored in the `videoMetadata.json` with the following shape:
+Each video will have metadata stored in the `metadata.json` with the following shape:
 
 ```typescript
 {
   id: string
   title: string
-  channel: string
-  publishedAt: string
+  channelId: string
+  channelName: string
   dateAddedToPlaylist: string
+  durationInSeconds: number | null
   url: string
-  lengthInSeconds: number
+  thumbnaillUrl: string
+  dateCreated: string
+
+  /**
+   * This value will be changed to `true` when future API calls are made and the
+   * video is found to be unavailable. This will allow us to retain previously
+   * fetch metadata.
+   */
+  isUnavailable?: boolean
 }
 ```
