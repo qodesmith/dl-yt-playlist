@@ -28,6 +28,8 @@ export function createPathData({
     video: `${directory}/${playlistName}/video`,
     thumbnails: `${directory}/${playlistName}/thumbnails`,
     json: `${directory}/${playlistName}/metadata.json`,
+    playlistResponses: `${directory}/${playlistName}/youtubePlaylistResponses.json`,
+    videoResponses: `${directory}/${playlistName}/youtubeVideoResponses.json`,
   } as const
 
   createPathSafely(pathNames.playlist)

@@ -37,6 +37,7 @@ export async function downloadYouTubePlaylist({
   maxDurationSeconds = Infinity,
   downloadType = 'audio',
   downloadThumbnails = false,
+  saveRawResponses = false,
 }: {
   // YouTube playlist id.
   playlistId: string
@@ -78,6 +79,18 @@ export async function downloadYouTubePlaylist({
    * Boolean indicating whether to download the video thumbnails as jpg files.
    */
   downloadThumbnails?: boolean
+
+  /**
+   * Optiona - default value `false`
+   *
+   * Boolean indicated whether to save the response data directly from the
+   * YouTube API. This can be helpful for debugging. If set to `true`, two files
+   * will be saved:
+   *
+   * - youtubePlaylistResponses.json
+   * - youtubeVideoResponses.json
+   */
+  saveRawResponses?: boolean
 }): Promise<ResultsMetadata> {
   const failures: Failure[] = []
   let totalVideosDownloaded = 0
@@ -156,7 +169,7 @@ export async function downloadYouTubePlaylist({
   const videoPath = pathData.video
 
   ////////////////////////////////////////////////////////////////////
-  // STEP 3:                                                        //
+  // STEP 4:                                                        //
   // Massage YouTube's playlist metadata into a format we will use. //
   ////////////////////////////////////////////////////////////////////
 
@@ -188,7 +201,7 @@ export async function downloadYouTubePlaylist({
   )
 
   /////////////////////////////////////////////////////////////////////////
-  // STEP 3:                                                             //
+  // STEP 5:                                                             //
   // Call the YouTube API and get the remaining metadata for each video, //
   // massaging it into a format we will use.                             //
   /////////////////////////////////////////////////////////////////////////
@@ -225,8 +238,26 @@ export async function downloadYouTubePlaylist({
     []
   )
 
+  ////////////////////////////////////////////////
+  // STEP 6:                                    //
+  // Optionally save the YouTube API responses. //
+  ////////////////////////////////////////////////
+
+  if (saveRawResponses) {
+    await Promise.all([
+      Bun.write(
+        pathData.playlistResponses,
+        JSON.stringify(videosListApiResponses, null, 2)
+      ),
+      Bun.write(
+        pathData.videoResponses,
+        JSON.stringify(videosListApiResponses, null, 2)
+      ),
+    ])
+  }
+
   //////////////////////////////////////////////////////////////////////////////
-  // STEP 4:                                                                  //
+  // STEP 7:                                                                  //
   // Reconcile the existing metadata we may have with YouTube's metadata.     //
   // Videos no longer availble or that have become available will be updated. //
   // This reconciled data is saved locally as a json file.                    //
@@ -254,7 +285,7 @@ export async function downloadYouTubePlaylist({
   }
 
   /////////////////////////
-  // STEP 5:             //
+  // STEP 8:             //
   // It's download time! //
   /////////////////////////
 

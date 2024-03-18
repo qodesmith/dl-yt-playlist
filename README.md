@@ -56,6 +56,18 @@ downloadYoutubePlaylist({
    * Boolean indicating whether to download the video thumbnails as jpg files.
    */
   downloadThumbnails?: boolean
+
+  /**
+   * Optiona - default value `false`
+   *
+   * Boolean indicated whether to save the response data directly from the
+   * YouTube API. This can be helpful for debugging. If set to `true`, two files
+   * will be saved:
+   *
+   * - youtubePlaylistResponses.json
+   * - youtubeVideoResponses.json
+   */
+  saveRawResponses?: boolean
 }): Promise<{
   failures: {
     url: string // The url of failed resource.
@@ -94,6 +106,8 @@ data
       <video id>.jpg
       ...
     metadata.json
+    youtubePlaylistResponses.json (only if `saveRawResponses` is true)
+    youtubeVideoResponses.json (only if `saveRawResponses` is true)
 ```
 
 <table>
@@ -112,6 +126,14 @@ data
   <tr>
     <td><code>metadata.json</code></td>
     <td>This file will contain an array of metadata on each video. See shape below</td>
+  </tr>
+  <tr>
+    <td><code>youtubePlaylistResponses.json</code></td>
+    <td>This file will contain an array of raw responses from YouTube's <a href="https://developers.google.com/youtube/v3/docs/playlistItems/list">PlaylistItems: list</a> api.</td>
+  </tr>
+  <tr>
+    <td><code>youtubeVideoResponses.json</code></td>
+    <td>This file will contain an array of raw responses from YouTube's <a href="https://developers.google.com/youtube/v3/docs/videos/list">Videos: list</a> api.</td>
   </tr>
 </table>
 
