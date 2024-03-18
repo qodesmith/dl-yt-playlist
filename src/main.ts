@@ -322,48 +322,49 @@ export async function downloadYouTubePlaylist({
   if (downloadType !== 'none') {
     if (totalCount) {
       console.log('\n💻 Downloading Videos...')
+      const start = performance.now()
+
+      for (let i = 0; i < totalCount; i++) {
+        const video = videosToDownload[i] as Video
+
+        try {
+          console.log(
+            `(${i + 1} of ${totalCount}) Downloading ${video.title}...`
+          )
+
+          // Trigger the download.
+          await downloadVideo({video, downloadType, audioPath, videoPath})
+          totalVideosDownloaded++
+
+          // Extract the audio file.
+          if (downloadType === 'both') {
+            try {
+              await ffmpegCreateAudioFile({audioPath, videoPath, video})
+            } catch (error) {
+              failures.push({
+                url: video.url,
+                title: video.title,
+                error,
+                type: 'ffmpeg',
+              })
+            }
+          }
+        } catch (error) {
+          failures.push({
+            url: video.url,
+            title: video.title,
+            error,
+            type: 'video',
+          })
+          console.log(`(${i + 1} of ${totalCount}) ❌ Failed to download`)
+        }
+      }
+
+      const time = sanitizeTime(performance.now() - start)
+      console.log(`✅ Videos downloaded in ${time}!`)
     } else {
       console.log('\n😎 All videos already accounted for!')
     }
-
-    const start = performance.now()
-
-    for (let i = 0; i < totalCount; i++) {
-      const video = videosToDownload[i] as Video
-
-      try {
-        console.log(`(${i + 1} of ${totalCount}) Downloading ${video.title}...`)
-
-        // Trigger the download.
-        await downloadVideo({video, downloadType, audioPath, videoPath})
-        totalVideosDownloaded++
-
-        // Extract the audio file.
-        if (downloadType === 'both') {
-          try {
-            await ffmpegCreateAudioFile({audioPath, videoPath, video})
-          } catch (error) {
-            failures.push({
-              url: video.url,
-              title: video.title,
-              error,
-              type: 'ffmpeg',
-            })
-          }
-        }
-      } catch (error) {
-        failures.push({
-          url: video.url,
-          title: video.title,
-          error,
-          type: 'video',
-        })
-        console.log(`(${i + 1} of ${totalCount}) ❌ Failed to download`)
-      }
-    }
-
-    const time = sanitizeTime(performance.now() - start)
-    console.log(`✅ Videos downloaded in ${time}!`)
   }
 
   if (downloadThumbnails) {
