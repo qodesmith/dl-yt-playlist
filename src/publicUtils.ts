@@ -87,12 +87,20 @@ function bytesToSize(bytes: number): string {
  * These are videos that have been download but are no longer available.
  * Videos may have been deleted or turned private.
  */
-export function getDeactivatedVideos(rootDir: string): Video[] {
+export function getDeactivatedVideos(rootDir: string) {
   const metadata: Video[] = JSON.parse(
     fs.readFileSync(`${rootDir}/metadata.json`, {
       encoding: 'utf8',
     })
   )
 
-  return metadata.filter(({isUnavailable}) => !!isUnavailable)
+  return metadata
+    .filter(({isUnavailable}) => !!isUnavailable)
+    .map(({id, dateAddedToPlaylist, dateCreated, channelId, channelName}) => ({
+      id,
+      dateAddedToPlaylist,
+      dateCreated,
+      channelId,
+      channelName,
+    }))
 }
