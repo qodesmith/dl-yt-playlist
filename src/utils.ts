@@ -433,10 +433,7 @@ export async function genIsOnline() {
 }
 
 export function sanitizeTime(ms: number): string {
-  // Calculate total seconds.
   const totalSeconds = ms / 1000
-
-  // Calculate minutes and seconds.
   const minutes = Math.floor(totalSeconds / 60)
   const seconds = (totalSeconds % 60)
     .toFixed(2)
@@ -459,14 +456,14 @@ export function sanitizeTime(ms: number): string {
      *              string and replaces it with an empty string.
      */
     .replace(/\.$/, '')
-  const unit = seconds === '1' ? 'second' : 'seconds'
+  const secondsFinalValue = pluralize(seconds, 'second')
 
   return minutes
-    ? `${pluralize(minutes, 'minute')} ${seconds} ${unit}`
-    : `${seconds} ${unit}`
+    ? `${pluralize(minutes, 'minute')} ${secondsFinalValue}`
+    : secondsFinalValue
 }
 
-function pluralize(amount: number, word: string): string {
-  const s = amount === 1 ? '' : 's'
+function pluralize(amount: number | string, word: string): string {
+  const s = +amount === 1 ? '' : 's'
   return `${amount} ${word}${s}`
 }
