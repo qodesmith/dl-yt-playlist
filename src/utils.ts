@@ -432,30 +432,36 @@ export async function genIsOnline() {
   })
 }
 
+export function sanitizeDecimal(num: number): string {
+  return (
+    num
+      .toFixed(2)
+      /**
+       * `(\.\d*?)` - captures the decimal point `\.` followed by zero or more
+       *              digits `\d*`, but it does so non-greedily due to the `?`
+       *              after the `*`. This means it captures the smallest possible
+       *              sequence of digits after the decimal point. This part is
+       *              enclosed in parentheses to create a capturing group. The
+       *              captured content will be referred to as `$1` in the
+       *              replacement string.
+       * `0*$`      - This part matches zero or more zeros `0*` that appear at the
+       *              end of the string `$`.
+       * `'$1'`     - Refers to the content captured by the first capturing group.
+       */
+      .replace(/(\.\d*?)0*$/, '$1')
+      /**
+       * `\.$`      - Remove any trailing period that might be present after the
+       *              zeros are removed. It matches a period at the end of the
+       *              string and replaces it with an empty string.
+       */
+      .replace(/\.$/, '')
+  )
+}
+
 export function sanitizeTime(ms: number): string {
   const totalSeconds = ms / 1000
   const minutes = Math.floor(totalSeconds / 60)
-  const seconds = (totalSeconds % 60)
-    .toFixed(2)
-    /**
-     * `(\.\d*?)` - captures the decimal point `\.` followed by zero or more
-     *              digits `\d*`, but it does so non-greedily due to the `?`
-     *              after the `*`. This means it captures the smallest possible
-     *              sequence of digits after the decimal point. This part is
-     *              enclosed in parentheses to create a capturing group. The
-     *              captured content will be referred to as `$1` in the
-     *              replacement string.
-     * `0*$`      - This part matches zero or more zeros `0*` that appear at the
-     *              end of the string `$`.
-     * `'$1'`     - Refers to the content captured by the first capturing group.
-     */
-    .replace(/(\.\d*?)0*$/, '$1')
-    /**
-     * `\.$`      - Remove any trailing period that might be present after the
-     *              zeros are removed. It matches a period at the end of the
-     *              string and replaces it with an empty string.
-     */
-    .replace(/\.$/, '')
+  const seconds = sanitizeDecimal(totalSeconds % 60)
   const secondsFinalValue = pluralize(seconds, 'second')
 
   return minutes

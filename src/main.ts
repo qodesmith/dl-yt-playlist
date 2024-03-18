@@ -24,6 +24,8 @@ import {
 import google from '@googleapis/youtube'
 import sanitizeFilename from 'sanitize-filename'
 
+export {getStats, getDeactivatedVideos} from './publicUtils'
+
 export async function downloadYouTubePlaylist({
   playlistId,
   apiKey,
@@ -86,6 +88,7 @@ export async function downloadYouTubePlaylist({
 
     if (!hasStdout || hasStderr) {
       console.log('Could not find the `yt-dlp` package on this system.')
+      console.log('This package is needed to download YouTube videos.')
       console.log(
         'Please head to https://github.com/yt-dlp/yt-dlp for download instructions.'
       )

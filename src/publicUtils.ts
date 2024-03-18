@@ -1,8 +1,22 @@
 import fs from 'node:fs'
+import {Video, sanitizeDecimal} from './utils'
+
+const extensions = {
+  audio: 'mp3',
+  video: 'mp4',
+  thumbnails: 'jpg',
+} as const
+
+type FolderData = {
+  playlistName: string
+  fileType: GetFolderDataArg['extension']
+  totalFiles: number
+  totalSize: string
+}
 
 export function getStats(rootDir: string): FolderData[] {
   return fs.readdirSync(rootDir).flatMap(dir => {
-    return ['audio', 'video', 'thumbnails'].reduce<FolderData[]>(
+    return (['audio', 'video', 'thumbnails'] as const).reduce<FolderData[]>(
       (acc, subDir) => {
         try {
           const folderDir = `${rootDir}/${dir}/${subDir}`
@@ -12,12 +26,7 @@ export function getStats(rootDir: string): FolderData[] {
             acc.push(
               getFolderData({
                 dir: folderDir,
-                extension:
-                  subDir === 'thumbnails'
-                    ? 'jpg'
-                    : subDir === 'audio'
-                    ? 'mp3'
-                    : 'mp4',
+                extension: extensions[subDir],
                 playlistName: dir,
               })
             )
@@ -35,13 +44,6 @@ type GetFolderDataArg = {
   dir: string
   extension: 'mp3' | 'mp4' | 'jpg'
   playlistName: string
-}
-
-type FolderData = {
-  playlistName: string
-  fileType: GetFolderDataArg['extension']
-  totalFiles: number
-  totalSize: string
 }
 
 function getFolderData({
@@ -67,11 +69,11 @@ function getFolderData({
 
 function bytesToSize(bytes: number): string {
   if (bytes >= 1073741824) {
-    return processBytesMath(bytes / 1073741824) + ' GB'
+    return sanitizeDecimal(bytes / 1073741824) + ' GB'
   } else if (bytes >= 1048576) {
-    return processBytesMath(bytes / 1048576) + ' MB'
+    return sanitizeDecimal(bytes / 1048576) + ' MB'
   } else if (bytes >= 1024) {
-    return processBytesMath(bytes / 1024) + ' KB'
+    return sanitizeDecimal(bytes / 1024) + ' KB'
   } else if (bytes > 1) {
     return bytes + ' bytes'
   } else if (bytes == 1) {
@@ -81,7 +83,16 @@ function bytesToSize(bytes: number): string {
   }
 }
 
-function processBytesMath(mathResult: number): string {
-  const [num, decimal] = mathResult.toString().split('.')
-  return decimal === '00' ? num : `${num}.${decimal.slice(0, 2)}`
+/**
+ * These are videos that have been download but are no longer available.
+ * Videos may have been deleted or turned private.
+ */
+export function getDeactivatedVideos(rootDir: string): Video[] {
+  const metadata: Video[] = JSON.parse(
+    fs.readFileSync(`${rootDir}/metadata.json`, {
+      encoding: 'utf8',
+    })
+  )
+
+  return metadata.filter(({isUnavailable}) => !!isUnavailable)
 }
