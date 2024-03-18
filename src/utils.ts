@@ -473,3 +473,32 @@ function pluralize(amount: number | string, word: string): string {
   const s = +amount === 1 ? '' : 's'
   return `${amount} ${word}${s}`
 }
+
+export type Failure = {
+  url: string
+  title: string
+  error: unknown
+  type: 'video' | 'thumbnail' | 'ffmpeg'
+}
+
+export type ResultsMetadata = {
+  failures: Failure[]
+  failureCount: number
+  date: string
+  dateNum: number
+  totalVideosDownloaded: number
+  totalThumbnailsDownloaded: number
+}
+
+export function getEmptyResults(): ResultsMetadata {
+  const date = new Date()
+
+  return {
+    failures: [],
+    failureCount: 0,
+    date: date.toLocaleDateString(),
+    dateNum: +date,
+    totalVideosDownloaded: 0,
+    totalThumbnailsDownloaded: 0,
+  }
+}

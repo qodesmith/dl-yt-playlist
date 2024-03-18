@@ -15,6 +15,9 @@ import {
   chunkArray,
   downloadThumbnailFile,
   sanitizeTime,
+  ResultsMetadata,
+  Failure,
+  getEmptyResults,
 } from './utils'
 import {
   genPlaylistItems,
@@ -75,7 +78,11 @@ export async function downloadYouTubePlaylist({
    * Boolean indicating whether to download the video thumbnails as jpg files.
    */
   downloadThumbnails?: boolean
-}) {
+}): Promise<ResultsMetadata> {
+  const failures: Failure[] = []
+  let totalVideosDownloaded = 0
+  let totalThumbnailsDownloaded = 0
+
   ////////////////////////////////////////////////////////
   // STEP 1:                                            //
   // Check if we have `yt-dlp` installed on the system. //
@@ -92,7 +99,8 @@ export async function downloadYouTubePlaylist({
       console.log(
         'Please head to https://github.com/yt-dlp/yt-dlp for download instructions.'
       )
-      process.exit(1)
+
+      return getEmptyResults()
     }
   } catch (e) {
     console.log('Could not find the `yt-dlp` package on this system.')
@@ -100,13 +108,15 @@ export async function downloadYouTubePlaylist({
     console.log(
       'Please head to https://github.com/yt-dlp/yt-dlp for download instructions.'
     )
-    process.exit(1)
+
+    return getEmptyResults()
   }
 
   const isOnline = await genIsOnline()
 
   if (!isOnline) {
-    return console.log('🛜 Please connect to the internet and try again.')
+    console.log('🛜 Please connect to the internet and try again.')
+    return getEmptyResults()
   }
 
   ////////////////////////////////////////////////////////////
@@ -232,9 +242,15 @@ export async function downloadYouTubePlaylist({
   console.log(`✅ Data processed in ${time3} ms!`)
 
   if (downloadType === 'none' && !downloadThumbnails) {
-    return console.log(
-      '\n💾 Only `metadata.json` written, no files downloaded.'
-    )
+    console.log('\n💾 Only `metadata.json` written, no files downloaded.')
+
+    return {
+      ...getEmptyResults(),
+      failures,
+      failureCount: failures.length,
+      totalVideosDownloaded,
+      totalThumbnailsDownloaded,
+    }
   }
 
   /////////////////////////
@@ -280,12 +296,28 @@ export async function downloadYouTubePlaylist({
 
         // Trigger the download.
         await downloadVideo({video, downloadType, audioPath, videoPath})
+        totalVideosDownloaded++
 
         // Extract the audio file.
         if (downloadType === 'both') {
-          await ffmpegCreateAudioFile({audioPath, videoPath, video})
+          try {
+            await ffmpegCreateAudioFile({audioPath, videoPath, video})
+          } catch (error) {
+            failures.push({
+              url: video.url,
+              title: video.title,
+              error,
+              type: 'ffmpeg',
+            })
+          }
         }
-      } catch (e) {
+      } catch (error) {
+        failures.push({
+          url: video.url,
+          title: video.title,
+          error,
+          type: 'video',
+        })
         console.log(`(${i + 1} of ${totalCount}) ❌ Failed to download`)
       }
     }
@@ -311,14 +343,19 @@ export async function downloadYouTubePlaylist({
         console.log(`${count} Downloading batch of thumbnails...`)
 
         await Promise.all(
-          chunks.map(({url, id}) => {
+          chunks.map(({url, id, title}) => {
             return downloadThumbnailFile({
               url,
               id,
               directory: pathData.thumbnails,
-            }).catch(() => {
-              console.log(`❌ Failed to download thumbnail (${id}) - ${url}`)
             })
+              .then(() => {
+                totalThumbnailsDownloaded++
+              })
+              .catch(error => {
+                failures.push({url, title, error, type: 'thumbnail'})
+                console.log(`❌ Failed to download thumbnail (${id}) - ${url}`)
+              })
           })
         )
       }
@@ -328,5 +365,13 @@ export async function downloadYouTubePlaylist({
     } else {
       console.log('\n😎 All thumbnails already accounted for!')
     }
+  }
+
+  return {
+    ...getEmptyResults(),
+    failures,
+    failureCount: failures.length,
+    totalVideosDownloaded,
+    totalThumbnailsDownloaded,
   }
 }
