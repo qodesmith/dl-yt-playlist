@@ -248,21 +248,19 @@ export async function downloadYouTubePlaylist({
     videoPath,
   })
 
-  const videosToDownload = newData
-    .slice(0, 2) // TODO - remove slice!
-    .filter(({durationInSeconds, id}) => {
-      const isValidDuration = (durationInSeconds ?? 0) <= maxDurationSeconds
-      if (!isValidDuration) return false
+  const videosToDownload = newData.filter(({durationInSeconds, id}) => {
+    const isValidDuration = (durationInSeconds ?? 0) <= maxDurationSeconds
+    if (!isValidDuration) return false
 
-      switch (downloadType) {
-        case 'audio':
-          return !audioIdSet.has(id)
-        case 'video':
-          return !videoIdSet.has(id)
-        case 'both':
-          return !audioIdSet.has(id) && !videoIdSet.has(id)
-      }
-    })
+    switch (downloadType) {
+      case 'audio':
+        return !audioIdSet.has(id)
+      case 'video':
+        return !videoIdSet.has(id)
+      case 'both':
+        return !audioIdSet.has(id) && !videoIdSet.has(id)
+    }
+  })
   const totalCount = videosToDownload.length
 
   if (downloadType !== 'none') {
@@ -298,7 +296,7 @@ export async function downloadYouTubePlaylist({
 
   if (downloadThumbnails) {
     const videosNeedingThumbnails = getThumbnailsToBeDownloaded({
-      videos: videosToDownload.slice(0, 2), // TODO - remove slice!,
+      videos: videosToDownload,
       directory: pathData.thumbnails,
     })
 
