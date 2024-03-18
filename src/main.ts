@@ -264,19 +264,21 @@ export async function downloadYouTubePlaylist({
     videoPath,
   })
 
-  const videosToDownload = newData.filter(({durationInSeconds, id}) => {
-    const isValidDuration = (durationInSeconds ?? 0) <= maxDurationSeconds
-    if (!isValidDuration) return false
+  const videosToDownload = newData.filter(
+    ({durationInSeconds, id, isUnavailable}) => {
+      const isValidDuration = (durationInSeconds ?? 0) <= maxDurationSeconds
+      if (isUnavailable || !isValidDuration) return false
 
-    switch (downloadType) {
-      case 'audio':
-        return !audioIdSet.has(id)
-      case 'video':
-        return !videoIdSet.has(id)
-      case 'both':
-        return !audioIdSet.has(id) && !videoIdSet.has(id)
+      switch (downloadType) {
+        case 'audio':
+          return !audioIdSet.has(id)
+        case 'video':
+          return !videoIdSet.has(id)
+        case 'both':
+          return !audioIdSet.has(id) && !videoIdSet.has(id)
+      }
     }
-  })
+  )
   const totalCount = videosToDownload.length
 
   if (downloadType !== 'none') {
