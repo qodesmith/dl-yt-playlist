@@ -247,7 +247,7 @@ export async function downloadYouTubePlaylist({
     await Promise.all([
       Bun.write(
         pathData.playlistResponses,
-        JSON.stringify(videosListApiResponses, null, 2)
+        JSON.stringify(playlistItemsApiResponses, null, 2)
       ),
       Bun.write(
         pathData.videoResponses,
