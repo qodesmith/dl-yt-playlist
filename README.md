@@ -68,7 +68,7 @@ downloadYoutubePlaylist({
      * 'ffmpeg' - ffmpeg failed to convert the downloaded video into an mp3 file.
      */
     type: 'video' | 'thumbnail' | 'ffmpeg'
-  }
+  }[]
   failureCount: number
   date: string // new Date().toLocaleDateString()
   dateNum: number // Date.now()
