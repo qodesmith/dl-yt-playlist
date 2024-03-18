@@ -1,3 +1,6 @@
-data
 node_modules
+data
+# dist - we want to include this in the bundle.
 .env
+.DS_Store
+test.ts

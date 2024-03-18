@@ -1,160 +1,126 @@
 import type {youtube_v3} from '@googleapis/youtube'
 import type {GaxiosResponse} from 'googleapis-common'
+import {PartialVideo, chunkArray} from './utils'
 
-import {
-  VideoIdAndDates,
-  getUnavailableVideoPlaylistItemIds,
-  getVideoIdsAndDatesAddedFromPlaylistResponse,
-} from './utils'
-
-type SinglePageDataInput = {
-  playlistId: string
-  pageToken?: string
-  maxResults?: number
-  incrementFetchCount: (num: number) => void
-  yt: youtube_v3.Youtube
-}
-
-export type PageData = {
-  playlistResponse: GaxiosResponse<youtube_v3.Schema$PlaylistItemListResponse>
-  videosResponse: GaxiosResponse<youtube_v3.Schema$VideoListResponse>
-  unavailableItemIds: string[]
-  videoIdsAndDates: VideoIdAndDates
-}
-
+/**
+ * Calls the YouTube "Playlists: list" endpoint to get the playlist name.
+ *
+ * https://developers.google.com/youtube/v3/docs/playlists/list
+ */
 export async function genPlaylistName({
-  playlistId,
   yt,
+  playlistId,
 }: {
-  playlistId: string
   yt: youtube_v3.Youtube
+  playlistId: string
 }) {
   const response = await yt.playlists.list({
     id: [playlistId],
     part: ['snippet'],
   })
 
-  const playlistName = response.data?.items?.[0].snippet?.title
+  const playlistName = response.data?.items?.[0]?.snippet?.title
   if (!playlistName) throw new Error('Failed to fetch playlist name')
 
   return playlistName
 }
 
 /**
- * - Fetches a single page of playlist items from a YouTube playlist.
- * - Fetches video metadata for each list item.
- * - Calculates which videos are no longer available.
+ * Calls the YouTube "PlaylistItems: list" endpoint to get the list of videos.
+ * If `fullData: true`, this function will call itself iteratively with the
+ * `nextPageToken` returned from the API reponse.
  *
- * Returns an object containing:
- * ```javascript
- * {playlistResponse, videosResponse, unavailableItemIds}
- * ```
+ * https://developers.google.com/youtube/v3/docs/playlistItems/list
+ *
+ * Data is returned in the `items` field:
+ *
+ * https://developers.google.com/youtube/v3/docs/playlistItems#resource
  */
-async function genSinglePageData({
+export async function genPlaylistItems({
+  yt,
   playlistId,
   pageToken,
-  incrementFetchCount,
-  yt,
-  maxResults = 50,
-}: SinglePageDataInput): Promise<PageData> {
+  maxResults = 50, // 50 is YouTube's maximum value.
+  includeFullData,
+  responses = [],
+}: {
+  yt: youtube_v3.Youtube
+  playlistId: string
+  pageToken?: string
+  maxResults?: number
+  includeFullData?: boolean
+  responses?: GaxiosResponse<youtube_v3.Schema$PlaylistItemListResponse>[]
+}): Promise<GaxiosResponse<youtube_v3.Schema$PlaylistItemListResponse>[]> {
   /**
-   * https://developers.google.com/youtube/v3/docs/playlistItems/list
+   * The `part` param will determine what data is returned in the reponse.
    *
-   * Data returned in the `items` field:
-   * https://developers.google.com/youtube/v3/docs/playlistItems#resource
+   * Some details of the response:
+   *
+   * `snippet.publishedAt` - The date and time that the item was added to the playlist.
+   * We will get the date and time the video was published on YouTube in a
+   * different API call.
+   *
+   * `snippet.resourceId.videoId` - The video id used in the YouTube URL (the short id).
+   *
+   * `snippet.videoOwnerChannelTitle` - The video's channel name.
+   *
+   * `snippet.videoOwnerChannelId` - The video's channel id.
    */
-  const playlistResponse = await yt.playlistItems.list({
+  const response = await yt.playlistItems.list({
     // Required params.
     playlistId,
-    part: ['contentDetails', 'id', 'snippet', 'status'],
+    part: ['snippet'],
 
     // Optional params.
     pageToken,
     maxResults,
   })
 
-  const videoIdsAndDates =
-    getVideoIdsAndDatesAddedFromPlaylistResponse(playlistResponse)
+  const {nextPageToken} = response.data
+  responses.push(response)
 
-  /**
-   * https://developers.google.com/youtube/v3/docs/videos/list
-   *
-   * Metadata we want:
-   * - channel name - `item.snippet.channelTitle`
-   * - title - `item.snippet.title`
-   * - URL (we can construct this)
-   * - length - `item.contentDetails.duration` - the format is IS0 8601 duration
-   * - audio bitrate - not available to non-video owners
-   */
-  const videosResponse = await yt.videos.list({
-    // Required params.
-    id: Object.keys(videoIdsAndDates),
-    part: ['snippet', 'contentDetails'],
-    maxResults,
-  })
-
-  incrementFetchCount(2)
-
-  const unavailableItemIds = getUnavailableVideoPlaylistItemIds({
-    playlistResponse,
-    videosResponse,
-  })
-
-  return {
-    playlistResponse,
-    videosResponse,
-    unavailableItemIds,
-    videoIdsAndDates,
+  if (includeFullData) {
+    return nextPageToken
+      ? genPlaylistItems({
+          yt,
+          playlistId,
+          pageToken: nextPageToken,
+          maxResults,
+          includeFullData,
+          responses,
+        })
+      : responses
   }
-}
 
-type PageDataInput = SinglePageDataInput & {
-  data: PageData[]
-  incrementFetchCount: (nun: number) => void
-  getFullData: boolean
-  yt: youtube_v3.Youtube
+  return responses
 }
 
 /**
- * - Fetches all pages of playlist items from a YouTube playlist.
- * - Calls `genSinglePageData` recursively to do so.
+ * Calls the YouTube "Videos: list" endpoint to get metadata for a list of
+ * videos given their ids.
  *
- * Returns an array of resolved calls to `genSinglePageData`
+ * https://developers.google.com/youtube/v3/docs/videos/list
  */
-export async function genData({
-  data,
-  playlistId,
-  pageToken,
-  incrementFetchCount,
-  getFullData,
+export async function genVideosList({
   yt,
-  maxResults = 50,
-}: PageDataInput): Promise<PageData[]> {
-  // Initiate a single request.
-  const pageData = await genSinglePageData({
-    playlistId,
-    pageToken,
-    maxResults,
-    incrementFetchCount,
-    yt,
-  })
+  partialVideosData,
+}: {
+  yt: youtube_v3.Youtube
+  partialVideosData: PartialVideo[]
+}): Promise<GaxiosResponse<youtube_v3.Schema$VideoListResponse>[]> {
+  const chunksOf50 = chunkArray(partialVideosData, 50)
+  const responses: GaxiosResponse<youtube_v3.Schema$VideoListResponse>[] = []
 
-  // Mutate the provided array by pushing the response.
-  data.push(pageData)
-
-  // Recursively fetch further responses.
-  const {nextPageToken} = pageData.playlistResponse.data
-  if (getFullData && nextPageToken) {
-    return genData({
-      data,
-      playlistId,
-      pageToken: nextPageToken,
-      maxResults,
-      incrementFetchCount,
-      getFullData,
-      yt,
+  for (const chunk of chunksOf50) {
+    const response = await yt.videos.list({
+      // Required params.
+      id: chunk.map(item => item.id),
+      part: ['snippet', 'contentDetails'],
+      maxResults: 50,
     })
+
+    responses.push(response)
   }
 
-  return data
+  return responses
 }

@@ -18,6 +18,7 @@
     "types": [
       "bun-types" // add Bun global
     ],
-    "esModuleInterop": true
+    "esModuleInterop": true,
+    "noUncheckedIndexedAccess": true
   }
 }
