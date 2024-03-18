@@ -188,7 +188,14 @@ export async function downloadYouTubePlaylist({
           url: `https://www.youtube.com/watch?v=${id}`,
         }
 
-        if (item.snippet?.description === 'This video is unavailable.') {
+        const description = item.snippet?.description
+
+        if (
+          description === 'This video is unavailable.' ||
+          description === 'This video is private.' ||
+          title === 'Private video' ||
+          title === 'Deleted video'
+        ) {
           partialVideo.isUnavailable = true
         }
 
