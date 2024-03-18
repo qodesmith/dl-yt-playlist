@@ -20,7 +20,7 @@ import {
   genPlaylistItems,
   genPlaylistName,
   genVideosList,
-} from './youtubeApiCalls2'
+} from './youtubeApiCalls'
 import google from '@googleapis/youtube'
 import sanitizeFilename from 'sanitize-filename'
 
