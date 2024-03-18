@@ -22,6 +22,7 @@ import {
   genVideosList,
 } from './youtubeApiCalls2'
 import google from '@googleapis/youtube'
+import sanitizeFilename from 'sanitize-filename'
 
 export async function downloadYouTubePlaylist({
   playlistId,
@@ -115,7 +116,7 @@ export async function downloadYouTubePlaylist({
   const start1 = performance.now()
   const yt = google.youtube({version: 'v3', auth: apiKey})
   const [playlistName, playlistItemsApiResponses] = await Promise.all([
-    await genPlaylistName({yt, playlistId}),
+    sanitizeFilename(await genPlaylistName({yt, playlistId})),
     await genPlaylistItems({
       yt,
       playlistId,
