@@ -18,6 +18,7 @@ import {
   ResultsMetadata,
   Failure,
   getEmptyResults,
+  arrayToIdObject,
 } from './utils'
 import {
   genPlaylistItems,
@@ -217,16 +218,16 @@ export async function downloadYouTubePlaylist({
 
   const start2 = performance.now()
   const videosListApiResponses = await genVideosList({yt, partialVideosData})
+  const partialVideosDataObj = arrayToIdObject(partialVideosData)
   const time2 = sanitizeTime(performance.now() - start2)
-
   const fetchCount2 = videosListApiResponses.length
+
   console.log(`✅ ${fetchCount2} fetch calls completed in ${time2}!`)
 
   const apiMetadata = videosListApiResponses.reduce<Video[]>(
-    (acc, response, i) => {
-      response.data.items?.forEach((item, j) => {
-        const partialIdx = i * 50 + j
-        const partialVideo = partialVideosData[partialIdx]
+    (acc, response) => {
+      response.data.items?.forEach(item => {
+        const partialVideo = partialVideosDataObj[item.id ?? '']
 
         // This should never happen, but just in case.
         if (!partialVideo) throw new Error('No partial video found')
