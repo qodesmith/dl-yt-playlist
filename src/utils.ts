@@ -136,11 +136,7 @@ export async function genExistingData(
    */
   try {
     const dataArr = (await Bun.file(`${metadataPath}`).json()) as Video[]
-
-    return dataArr.reduce<Record<string, Video>>((acc, video) => {
-      acc[video.id] = video
-      return acc
-    }, {})
+    return arrayToIdObject(dataArr)
   } catch {
     // Getting here means the file didn't exist.
     return {}
@@ -394,30 +390,30 @@ export function getExistingIds({
   }
 }
 
+/**
+ * This regex pattern matches a square bracket followed by one or more
+ * alphanumeric characters or the special characters `-` and `_`, followed
+ * by a closing square bracket. The .\w+$ part matches the file extension
+ * and ensures that the match is at the end of the file name.
+ *
+ * Here's a step-by-step explanation of the regex pattern:
+ * 1. `\[` - Matches a literal opening square bracket
+ * 2. `(` - Starts a capturing group
+ * 3. `[a-zA-Z0-9_-]` - Matches any alphanumeric character or the special characters `-` and `_`
+ * 4. `+` - Matches one or more of the preceding characters
+ * 5. `)` - Ends the capturing group
+ * 6. `\]` - Matches a literal closing square bracket
+ * 7. `\.` - Matches a literal dot
+ * 8. `\w+` - Matches one or more word characters (i.e., the file extension)
+ * 9. `$` - Matches the end of the string
+ *
+ * Thanks to perplexity.ai for generating this regex!
+ */
+export const squareBracketIdRegex = /\[([a-zA-Z0-9_-]+)\]\.\w+$/
+
 function getExistingVideoIdsSet(
   directory: ReturnType<typeof createPathData>['audio' | 'video']
 ): Set<string> {
-  /**
-   * This regex pattern matches a square bracket followed by one or more
-   * alphanumeric characters or the special characters `-` and `_`, followed
-   * by a closing square bracket. The .\w+$ part matches the file extension
-   * and ensures that the match is at the end of the file name.
-   *
-   * Here's a step-by-step explanation of the regex pattern:
-   * 1. `\[` - Matches a literal opening square bracket
-   * 2. `(` - Starts a capturing group
-   * 3. `[a-zA-Z0-9_-]` - Matches any alphanumeric character or the special characters `-` and `_`
-   * 4. `+` - Matches one or more of the preceding characters
-   * 5. `)` - Ends the capturing group
-   * 6. `\]` - Matches a literal closing square bracket
-   * 7. `\.` - Matches a literal dot
-   * 8. `\w+` - Matches one or more word characters (i.e., the file extension)
-   * 9. `$` - Matches the end of the string
-   *
-   * Thanks to perplexity.ai for generating this regex!
-   */
-  const squareBracketIdRegex = /\[([a-zA-Z0-9_-]+)\]\.\w+$/
-
   return fs.readdirSync(directory).reduce((set, fileName) => {
     const id = fileName.match(squareBracketIdRegex)?.[1]
     if (id) set.add(id)
@@ -503,4 +499,13 @@ export function getEmptyResults(): ResultsMetadata {
     totalVideosDownloaded: 0,
     totalThumbnailsDownloaded: 0,
   }
+}
+
+export function arrayToIdObject<T extends {id: string}>(
+  arr: T[]
+): Record<string, T> {
+  return arr.reduce<Record<string, T>>((acc, item) => {
+    acc[item.id] = item
+    return acc
+  }, {})
 }
