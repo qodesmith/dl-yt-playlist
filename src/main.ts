@@ -218,9 +218,9 @@ export async function downloadYouTubePlaylist({
 
   const start2 = performance.now()
   const videosListApiResponses = await genVideosList({yt, partialVideosData})
-  const partialVideosDataObj = arrayToIdObject(partialVideosData)
   const time2 = sanitizeTime(performance.now() - start2)
   const fetchCount2 = videosListApiResponses.length
+  const partialVideosDataObj = arrayToIdObject(partialVideosData)
 
   console.log(`✅ ${fetchCount2} fetch calls completed in ${time2}!`)
 
@@ -274,7 +274,13 @@ export async function downloadYouTubePlaylist({
   console.log('\n💾 Reconciling the data & saving as `metadata.json`...')
   const start3 = performance.now()
   const existingData = await genExistingData(pathData.json)
-  const newData = updateLocalVideosData({apiMetadata, existingData})
+  const notFounds = partialVideosData.reduce<Video[]>((acc, video) => {
+    if (video.isUnavailable) {
+      acc.push({...video, durationInSeconds: null, dateCreated: ''})
+    }
+    return acc
+  }, [])
+  const newData = updateLocalVideosData({apiMetadata, existingData, notFounds})
   await Bun.write(pathData.json, JSON.stringify(newData, null, 2))
 
   const time3 = (performance.now() - start3).toFixed(2)

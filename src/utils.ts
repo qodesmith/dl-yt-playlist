@@ -154,16 +154,24 @@ export async function genExistingData(
 export function updateLocalVideosData({
   apiMetadata,
   existingData,
+  notFounds,
 }: {
   apiMetadata: Video[]
   existingData: Record<string, Video>
+  notFounds: Video[]
 }): Video[] {
-  // Update `existingData`.
-  apiMetadata.forEach(currentVideo => {
-    const {id} = currentVideo
-    const existingVideo = existingData[id]
+  /**
+   * The order matters here. We want `apiMetadata` to be first.
+   * We're conditionally mutating `existingData` with `apiMetadata` and
+   * `notFounds`.
+   */
+  ;[apiMetadata, notFounds].forEach(videos => {
+    videos.forEach(currentVideo => {
+      const {id} = currentVideo
+      const existingVideo = existingData[id]
 
-    updateVideoData({currentVideo, existingVideo, existingData})
+      updateVideoData({currentVideo, existingVideo, existingData})
+    })
   })
 
   /**
