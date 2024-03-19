@@ -1,5 +1,10 @@
 import fs from 'node:fs'
-import {Video, sanitizeDecimal} from './utils'
+import {
+  Video,
+  arrayToIdObject,
+  sanitizeDecimal,
+  squareBracketIdRegex,
+} from './utils'
 
 const extensions = {
   audio: 'mp3',
@@ -93,14 +98,47 @@ export function getDeactivatedVideos(rootDir: string) {
       encoding: 'utf8',
     })
   )
+  const metadataRecord = arrayToIdObject(metadata)
+  const unavailableVideos = metadata.filter(
+    ({isUnavailable}) => !!isUnavailable
+  )
+  const unaccountedForVideos: UnaccountedForVideo[] = (() => {
+    const videos: UnaccountedForVideo[] = []
+    const audioDir = `${rootDir}/audio` as const
+    const videoDir = `${rootDir}/video` as const
 
-  return metadata
-    .filter(({isUnavailable}) => !!isUnavailable)
-    .map(({id, dateAddedToPlaylist, dateCreated, channelId, channelName}) => ({
-      id,
-      dateAddedToPlaylist,
-      dateCreated,
-      channelId,
-      channelName,
-    }))
+    addUnaccountedForVideos({videos, metadataRecord, directory: audioDir})
+    addUnaccountedForVideos({videos, metadataRecord, directory: videoDir})
+
+    return videos
+  })()
+
+  return {unavailableVideos, unaccountedForVideos}
+}
+
+type UnaccountedForVideo = {
+  id: string
+  title: string
+}
+
+function addUnaccountedForVideos({
+  videos,
+  metadataRecord,
+  directory,
+}: {
+  videos: UnaccountedForVideo[]
+  metadataRecord: Record<string, Video>
+  directory: `${string}/audio` | `${string}/video`
+}): void {
+  const extension = directory.endsWith('audio') ? '.mp3' : '.mp4'
+
+  try {
+    fs.readdirSync(directory).forEach(item => {
+      const id = item.match(squareBracketIdRegex)?.[1]
+
+      if (id && item.endsWith(extension) && !metadataRecord[id]) {
+        videos.push({id, title: item.slice(0, -4)})
+      }
+    })
+  } catch {}
 }
