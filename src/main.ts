@@ -39,6 +39,7 @@ export async function downloadYouTubePlaylist({
   downloadType = 'audio',
   downloadThumbnails = false,
   saveRawResponses = false,
+  silent = false,
 }: {
   // YouTube playlist id.
   playlistId: string
@@ -92,7 +93,16 @@ export async function downloadYouTubePlaylist({
    * - youtubeVideoResponses.json
    */
   saveRawResponses?: boolean
+
+  /**
+   * Optional - default value `false`
+   *
+   * Boolean indicating wether to silence all internal console.log's. This will
+   * not silence messages indicating missing `yt-dlp` or being offline.
+   */
+  silent?: boolean
 }): Promise<ResultsMetadata> {
+  const log = silent ? () => {} : console.log
   const failures: Failure[] = []
   let totalVideosDownloaded = 0
   let totalThumbnailsDownloaded = 0
@@ -139,7 +149,7 @@ export async function downloadYouTubePlaylist({
   // with partial metadata for each video.                  //
   ////////////////////////////////////////////////////////////
 
-  console.log('💻 Fetching playlist data from the YouTube API...')
+  log('💻 Fetching playlist data from the YouTube API...')
   const start1 = performance.now()
   const yt = google.youtube({version: 'v3', auth: apiKey})
   const [playlistName, playlistItemsApiResponses] = await Promise.all([
@@ -153,7 +163,7 @@ export async function downloadYouTubePlaylist({
 
   const time1 = sanitizeTime(performance.now() - start1)
   const fetchCount1 = playlistItemsApiResponses.length + 1
-  console.log(`✅ ${fetchCount1} fetch calls completed in ${time1}!`)
+  log(`✅ ${fetchCount1} fetch calls completed in ${time1}!`)
 
   ///////////////////////////////////////////////////////////////////////
   // STEP 3:                                                           //
@@ -214,7 +224,7 @@ export async function downloadYouTubePlaylist({
   // massaging it into a format we will use.                             //
   /////////////////////////////////////////////////////////////////////////
 
-  console.log('\n💻 Fetching video data from the YouTube API...')
+  log('\n💻 Fetching video data from the YouTube API...')
 
   const start2 = performance.now()
   const videosListApiResponses = await genVideosList({yt, partialVideosData})
@@ -222,7 +232,7 @@ export async function downloadYouTubePlaylist({
   const fetchCount2 = videosListApiResponses.length
   const partialVideosDataObj = arrayToIdObject(partialVideosData)
 
-  console.log(`✅ ${fetchCount2} fetch calls completed in ${time2}!`)
+  log(`✅ ${fetchCount2} fetch calls completed in ${time2}!`)
 
   const apiMetadata = videosListApiResponses.reduce<Video[]>(
     (acc, response) => {
@@ -271,7 +281,7 @@ export async function downloadYouTubePlaylist({
   // This reconciled data is saved locally as a json file.                    //
   //////////////////////////////////////////////////////////////////////////////
 
-  console.log('\n💾 Reconciling the data & saving as `metadata.json`...')
+  log('\n💾 Reconciling the data & saving as `metadata.json`...')
   const start3 = performance.now()
   const existingData = await genExistingData(pathData.json)
   const notFounds = partialVideosData.reduce<Video[]>((acc, video) => {
@@ -284,10 +294,10 @@ export async function downloadYouTubePlaylist({
   await Bun.write(pathData.json, JSON.stringify(newData, null, 2))
 
   const time3 = (performance.now() - start3).toFixed(2)
-  console.log(`✅ Data processed in ${time3} ms!`)
+  log(`✅ Data processed in ${time3} ms!`)
 
   if (downloadType === 'none' && !downloadThumbnails) {
-    console.log('\n💾 Only `metadata.json` written, no files downloaded.')
+    log('\n💾 Only `metadata.json` written, no files downloaded.')
 
     return {
       ...getEmptyResults(),
@@ -328,16 +338,14 @@ export async function downloadYouTubePlaylist({
 
   if (downloadType !== 'none') {
     if (totalCount) {
-      console.log('\n💻 Downloading Videos...')
+      log('\n💻 Downloading Videos...')
       const start = performance.now()
 
       for (let i = 0; i < totalCount; i++) {
         const video = videosToDownload[i] as Video
 
         try {
-          console.log(
-            `(${i + 1} of ${totalCount}) Downloading ${video.title}...`
-          )
+          log(`(${i + 1} of ${totalCount}) Downloading ${video.title}...`)
 
           // Trigger the download.
           await downloadVideo({video, downloadType, audioPath, videoPath})
@@ -363,14 +371,14 @@ export async function downloadYouTubePlaylist({
             error,
             type: 'video',
           })
-          console.log(`(${i + 1} of ${totalCount}) ❌ Failed to download`)
+          log(`(${i + 1} of ${totalCount}) ❌ Failed to download`)
         }
       }
 
       const time = sanitizeTime(performance.now() - start)
-      console.log(`✅ Videos downloaded in ${time}!`)
+      log(`✅ Videos downloaded in ${time}!`)
     } else {
-      console.log('\n😎 All videos already accounted for!')
+      log('\n😎 All videos already accounted for!')
     }
   }
 
@@ -383,12 +391,12 @@ export async function downloadYouTubePlaylist({
     if (videosNeedingThumbnails.length) {
       const thumbnailChunks = chunkArray(videosNeedingThumbnails, 4)
       const start = performance.now()
-      console.log('\n💻 Downloading thumbnails...')
+      log('\n💻 Downloading thumbnails...')
 
       for (let i = 0; i < thumbnailChunks.length; i++) {
         const chunks = thumbnailChunks[i] as Video[]
         const count = `(${i + 1} of ${thumbnailChunks.length})`
-        console.log(`${count} Downloading batch of thumbnails...`)
+        log(`${count} Downloading batch of thumbnails...`)
 
         await Promise.all(
           chunks.map(({url, id, title}) => {
@@ -402,16 +410,16 @@ export async function downloadYouTubePlaylist({
               })
               .catch(error => {
                 failures.push({url, title, error, type: 'thumbnail'})
-                console.log(`❌ Failed to download thumbnail (${id}) - ${url}`)
+                log(`❌ Failed to download thumbnail (${id}) - ${url}`)
               })
           })
         )
       }
 
       const time = sanitizeTime(performance.now() - start)
-      console.log(`✅ Thumbnails downloaded in ${time}!`)
+      log(`✅ Thumbnails downloaded in ${time}!`)
     } else {
-      console.log('\n😎 All thumbnails already accounted for!')
+      log('\n😎 All thumbnails already accounted for!')
     }
   }
 
