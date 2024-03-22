@@ -47,7 +47,7 @@ export async function downloadYouTubePlaylist({
   // YouTube API key.
   apiKey: string
 
-  // Full path to the directory you want to save your data.
+  // Full path to the directory where you want to save your data.
   directory: string
 
   /**

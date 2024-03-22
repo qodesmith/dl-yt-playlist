@@ -22,7 +22,7 @@ downloadYoutubePlaylist({
   // YouTube API key.
   apiKey: string
 
-  // Full path to the directory you want to save your data.
+  // Full path to the directory where you want to save your data.
   directory: string
 
   /**
@@ -68,6 +68,14 @@ downloadYoutubePlaylist({
    * - youtubeVideoResponses.json
    */
   saveRawResponses?: boolean
+
+  /**
+   * Optional - default value `false`
+   *
+   * Boolean indicating wether to silence all internal console.log's. This will
+   * not silence messages indicating missing `yt-dlp` or being offline.
+   */
+  silent?: boolean
 }): Promise<{
   failures: {
     url: string // The url of failed resource.
@@ -94,7 +102,7 @@ downloadYoutubePlaylist({
 Downloads will be organized into the following folder structure:
 
 ```
-data
+directory-you-provided
   /<playlist name>
     /video
       <title> [<video id>].mp4
