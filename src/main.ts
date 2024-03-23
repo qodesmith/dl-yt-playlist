@@ -107,10 +107,10 @@ export async function downloadYouTubePlaylist({
   let totalVideosDownloaded = 0
   let totalThumbnailsDownloaded = 0
 
-  ////////////////////////////////////////////////////////
-  // STEP 1:                                            //
-  // Check if we have `yt-dlp` installed on the system. //
-  ////////////////////////////////////////////////////////
+  /////////////////////////////////////////////////////////////////////
+  // STEP 1:                                                         //
+  // Check if we have `yt-dlp` and `ffmpeg` installed on the system. //
+  /////////////////////////////////////////////////////////////////////
 
   try {
     const proc = Bun.spawnSync(['yt-dlp', '--version'])
@@ -134,6 +134,34 @@ export async function downloadYouTubePlaylist({
     )
 
     return getEmptyResults()
+  }
+
+  if (downloadType === 'both' || downloadType === 'audio') {
+    try {
+      const proc = Bun.spawnSync(['ffmpeg', '-version'])
+      const hasStdout = proc.stdout.toString().length !== 0
+      const hasStderr = proc.stderr.toString().length !== 0
+
+      if (!hasStdout || hasStderr) {
+        console.log('Could not find the `ffmpeg` package on this system.')
+        console.log(
+          'This package is needed to extract audio from YouTube videos.'
+        )
+        console.log(
+          'You can download a binary at https://www.ffmpeg.org/download.html or run `brew install ffmpeg`.'
+        )
+
+        return getEmptyResults()
+      }
+    } catch (e) {
+      console.log('Could not find the `ffmpeg` package on this system.')
+      console.log(
+        'This package is needed to extract audio from YouTube videos.'
+      )
+      console.log(
+        'You can download a binary at https://www.ffmpeg.org/download.html or run `brew install ffmpeg`.'
+      )
+    }
   }
 
   const isOnline = await genIsOnline()
