@@ -4,6 +4,15 @@ import sanitizeFilename from 'sanitize-filename'
 
 export type DownloadType = 'audio' | 'video' | 'both' | 'none'
 
+export const fileAndFolderNames = {
+  audio: 'audio',
+  video: 'video',
+  thumbnails: 'thumbnails',
+  json: 'metadata.json',
+  playlistResponses: 'youtubePlaylistResponses.json',
+  videoResponses: 'youtubeVideoResponses.json',
+} as const
+
 /**
  * Creates a folder with the playlist name and a few sub-folders conditionlly:
  *
@@ -22,14 +31,17 @@ export function createPathData({
   downloadType: DownloadType
   downloadThumbnails?: boolean
 }) {
+  const {audio, video, thumbnails, json, playlistResponses, videoResponses} =
+    fileAndFolderNames
+  const playlistDirectory = `${directory}/${playlistName}`
   const pathNames = {
-    playlist: `${directory}/${playlistName}`,
-    audio: `${directory}/${playlistName}/audio`,
-    video: `${directory}/${playlistName}/video`,
-    thumbnails: `${directory}/${playlistName}/thumbnails`,
-    json: `${directory}/${playlistName}/metadata.json`,
-    playlistResponses: `${directory}/${playlistName}/youtubePlaylistResponses.json`,
-    videoResponses: `${directory}/${playlistName}/youtubeVideoResponses.json`,
+    playlist: playlistDirectory,
+    audio: `${playlistDirectory}/${audio}`,
+    video: `${playlistDirectory}/${video}`,
+    thumbnails: `${playlistDirectory}/${thumbnails}`,
+    json: `${playlistDirectory}/${json}`,
+    playlistResponses: `${playlistDirectory}/${playlistResponses}`,
+    videoResponses: `${playlistDirectory}/${videoResponses}`,
   } as const
 
   createPathSafely(pathNames.playlist)
@@ -126,6 +138,10 @@ export function parseISO8601Duration(
   return totalSeconds
 }
 
+/**
+ * Reads the existing json file and returns an object in the shape of
+ * `{id: Video}[]`
+ */
 export async function genExistingData(
   metadataPath: ReturnType<typeof createPathData>['json']
 ): Promise<Record<string, Video>> {
@@ -144,34 +160,53 @@ export async function genExistingData(
 }
 
 /**
- * This function will mutate `existingData` based upon what it finds in
- * `apiMetadata`. The goal is to retain information we may have previously
- * fetched from the YouTube API that is no longer available due to the video
- * being deleted, private, etc.
+ * For each video in the response from YouTube, compare it to what we have in
+ * the existing json file on disk.
+ *
+ * If the existing data doesn't have a video, it will be added to it.
+ *
+ * If the existing data conflicts with YouTube, it will be updated.
+ *
+ * The benefit here is if a video has been deleted or gone private, we will
+ * retain what information we previously fetched from YouTube as that data will
+ * no longer be returned from the YouTube API. We add an `isUnavailable` flag
+ * to the video to indicate this scenario.
  *
  * This function will return a new array sorted by `dateAddedToPlaylist`.
  */
 export function updateLocalVideosData({
   apiMetadata,
   existingData,
-  notFounds,
 }: {
+  /** This represents the massaged response from YouTube. */
   apiMetadata: Video[]
-  existingData: Record<string, Video>
-  notFounds: Video[]
-}): Video[] {
-  /**
-   * The order matters here. We want `apiMetadata` to be first.
-   * We're conditionally mutating `existingData` with `apiMetadata` and
-   * `notFounds`.
-   */
-  ;[apiMetadata, notFounds].forEach(videos => {
-    videos.forEach(currentVideo => {
-      const {id} = currentVideo
-      const existingVideo = existingData[id]
 
-      updateVideoData({currentVideo, existingVideo, existingData})
-    })
+  /** This represents metadata we already had in the json file. */
+  existingData: Record<string, Video>
+}): Video[] {
+  apiMetadata.forEach(currentVideo => {
+    const {id} = currentVideo
+    const existingVideo = existingData[id]
+
+    if (existingVideo) {
+      if (currentVideo.isUnavailable) {
+        /**
+         * YouTube is saying this video is unavailable - update just that field
+         * in our local data, retaining all other data we have, since YouTube will
+         * no longer give it to us.
+         */
+        existingVideo.isUnavailable = true
+      } else if (existingVideo.isUnavailable) {
+        /**
+         * If a previously unavailable video is now available, update our local
+         * data wholesale with the data from YouTube.
+         */
+        existingData[id] = currentVideo
+      }
+    } else {
+      // This is a new video that we did not have in our local data - save it.
+      existingData[id] = currentVideo
+    }
   })
 
   /**
@@ -179,43 +214,11 @@ export function updateLocalVideosData({
    * playlist, descending.
    */
   return Object.values(existingData).toSorted((a, b) => {
-    const dateNum1 = +new Date(a.dateAddedToPlaylist)
-    const dateNum2 = +new Date(b.dateAddedToPlaylist)
+    const dateNum1 = +new Date(a.dateAddedToPlaylist || 0)
+    const dateNum2 = +new Date(b.dateAddedToPlaylist || 0)
 
     return dateNum2 - dateNum1
   })
-}
-
-function updateVideoData({
-  currentVideo,
-  existingVideo,
-  existingData,
-}: {
-  currentVideo: Video
-  existingVideo: Video | undefined
-  existingData: Record<string, Video>
-}) {
-  const {id} = currentVideo
-
-  if (existingVideo) {
-    if (currentVideo.isUnavailable) {
-      /**
-       * YouTube is saying this video is unavailable - update just that field
-       * in our local data, retaining all other data we have, since YouTube will
-       * no longer give it to us.
-       */
-      existingVideo.isUnavailable = true
-    } else if (existingVideo.isUnavailable) {
-      /**
-       * If a previously unavailable video is now available, update our local
-       * data wholesale with the data from YouTube.
-       */
-      existingData[id] = currentVideo
-    }
-  } else {
-    // This is a new video that we did not have in our local data - save it.
-    existingData[id] = currentVideo
-  }
 }
 
 export function ffmpegCreateAudioFile({
@@ -307,7 +310,9 @@ export function downloadVideo({
         return videoTemplate
       default:
         // We should never get here.
-        throw new Error('Unable to create yt-dlp template')
+        throw new Error(
+          `Unable to create yt-dlp template from download type "${downloadType}"`
+        )
     }
   })()
 
@@ -372,9 +377,16 @@ export async function downloadThumbnailFile({
   id: string
   directory: ReturnType<typeof createPathData>['thumbnails']
 }) {
-  const res = await fetch(url)
-  const buffer = await res.arrayBuffer()
-  await Bun.write(`${directory}/${id}.jpg`, buffer)
+  const res = await fetch(url, {
+    method: 'GET',
+    headers: {'Content-Type': 'image/jpeg'},
+  })
+
+  if (!res.ok) {
+    throw new Error('Network response was not ok')
+  }
+
+  return Bun.write(`${directory}/${id}.jpg`, res)
 }
 
 export function getExistingIds({
@@ -464,6 +476,10 @@ export function sanitizeDecimal(num: number): string {
   )
 }
 
+/**
+ * Converts a number of milliseconds into a plain-english string, such as
+ * "4 minutes 32 seconds"
+ */
 export function sanitizeTime(ms: number): string {
   const totalSeconds = ms / 1000
   const minutes = Math.floor(totalSeconds / 60)
@@ -496,7 +512,7 @@ export type ResultsMetadata = {
   totalThumbnailsDownloaded: number
 }
 
-export function getEmptyResults(): ResultsMetadata {
+export function getDefaultResults(): ResultsMetadata {
   const date = new Date()
 
   return {

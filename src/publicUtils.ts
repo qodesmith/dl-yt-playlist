@@ -1,7 +1,11 @@
 import fs from 'node:fs'
 import {
+  Failure,
   Video,
   arrayToIdObject,
+  chunkArray,
+  downloadThumbnailFile,
+  fileAndFolderNames,
   sanitizeDecimal,
   squareBracketIdRegex,
 } from './utils'
@@ -21,27 +25,30 @@ type FolderData = {
 
 export function getStats(rootDir: string): FolderData[] {
   return fs.readdirSync(rootDir).flatMap(dir => {
-    return (['audio', 'video', 'thumbnails'] as const).reduce<FolderData[]>(
-      (acc, subDir) => {
-        try {
-          const folderDir = `${rootDir}/${dir}/${subDir}`
-          const stats = fs.statSync(folderDir)
+    return (
+      [
+        fileAndFolderNames.audio,
+        fileAndFolderNames.video,
+        fileAndFolderNames.thumbnails,
+      ] as const
+    ).reduce<FolderData[]>((acc, subDir) => {
+      try {
+        const folderDir = `${rootDir}/${dir}/${subDir}`
+        const stats = fs.statSync(folderDir)
 
-          if (stats.isDirectory()) {
-            acc.push(
-              getFolderData({
-                dir: folderDir,
-                extension: extensions[subDir],
-                playlistName: dir,
-              })
-            )
-          }
-        } catch (e) {}
+        if (stats.isDirectory()) {
+          acc.push(
+            getFolderData({
+              dir: folderDir,
+              extension: extensions[subDir],
+              playlistName: dir,
+            })
+          )
+        }
+      } catch (e) {}
 
-        return acc
-      },
-      []
-    )
+      return acc
+    }, [])
   })
 }
 
@@ -130,7 +137,9 @@ function addUnaccountedForVideos({
   metadataRecord: Record<string, Video>
   directory: `${string}/audio` | `${string}/video`
 }): void {
-  const extension = directory.endsWith('audio') ? '.mp3' : '.mp4'
+  const extension = directory.endsWith(fileAndFolderNames.audio)
+    ? '.mp3'
+    : '.mp4'
 
   try {
     fs.readdirSync(directory).forEach(item => {
@@ -141,4 +150,67 @@ function addUnaccountedForVideos({
       }
     })
   } catch {}
+}
+
+export async function downloadMissingThumbnails(playlistDirectory: string) {
+  const thumbnailDir =
+    `${playlistDirectory}/${fileAndFolderNames.thumbnails}` as const
+  const jsonFilePath = `${playlistDirectory}/${fileAndFolderNames.json}`
+
+  /**
+   * We use the json file as the source of truth for thumbnail urls.
+   * To get the latest json data, run `downloadYouTubePlaylist` again.
+   */
+  const videoMetadata: Video[] = await Bun.file(jsonFilePath).json()
+  const currentThumbnailIdsSet = fs
+    .readdirSync(thumbnailDir)
+    .reduce<Set<string>>((set, item) => {
+      if (item.endsWith('.jpg')) {
+        set.add(item.split('.')[0] as string)
+      }
+
+      return set
+    }, new Set())
+
+  const thumbnailsToDownload = videoMetadata.reduce<Video[]>((acc, video) => {
+    if (!currentThumbnailIdsSet.has(video.id)) {
+      acc.push(video)
+    }
+
+    return acc
+  }, [])
+
+  const thumbnailChunks = chunkArray(thumbnailsToDownload, 4)
+  let totalThumbnailsDownloaded = 0
+  const failures: Failure[] = []
+
+  for (let i = 0; i < thumbnailChunks.length; i++) {
+    const chunks = thumbnailChunks[i] as Video[]
+    const count = `(${i + 1} of ${thumbnailChunks.length})`
+    console.log(`${count} Downloading batch of thumbnails...`)
+
+    await Promise.all(
+      chunks.map(({url, id, title}) => {
+        return downloadThumbnailFile({
+          url,
+          id,
+          directory: thumbnailDir,
+        })
+          .then(() => {
+            totalThumbnailsDownloaded++
+          })
+          .catch(error => {
+            failures.push({url, title, error, type: 'thumbnail'})
+            console.log(`❌ Failed to download thumbnail (${id}) - ${url}`)
+          })
+      })
+    )
+  }
+
+  return {
+    failures,
+    failureCount: failures.length,
+    attemptedDownloadCount: thumbnailsToDownload.length,
+    totalThumbnailsDownloaded,
+  }
 }

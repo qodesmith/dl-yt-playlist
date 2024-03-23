@@ -17,8 +17,9 @@ import {
   sanitizeTime,
   ResultsMetadata,
   Failure,
-  getEmptyResults,
+  getDefaultResults,
   arrayToIdObject,
+  fileAndFolderNames,
 } from './utils'
 import {
   genPlaylistItems,
@@ -124,7 +125,7 @@ export async function downloadYouTubePlaylist({
         'Please head to https://github.com/yt-dlp/yt-dlp for download instructions.'
       )
 
-      return getEmptyResults()
+      return getDefaultResults()
     }
   } catch (e) {
     console.log('Could not find the `yt-dlp` package on this system.')
@@ -133,7 +134,7 @@ export async function downloadYouTubePlaylist({
       'Please head to https://github.com/yt-dlp/yt-dlp for download instructions.'
     )
 
-    return getEmptyResults()
+    return getDefaultResults()
   }
 
   if (downloadType === 'both' || downloadType === 'audio') {
@@ -151,7 +152,7 @@ export async function downloadYouTubePlaylist({
           'You can download a binary at https://www.ffmpeg.org/download.html or run `brew install ffmpeg`.'
         )
 
-        return getEmptyResults()
+        return getDefaultResults()
       }
     } catch (e) {
       console.log('Could not find the `ffmpeg` package on this system.')
@@ -168,7 +169,7 @@ export async function downloadYouTubePlaylist({
 
   if (!isOnline) {
     console.log('🛜 Please connect to the internet and try again.')
-    return getEmptyResults()
+    return getDefaultResults()
   }
 
   ////////////////////////////////////////////////////////////
@@ -210,6 +211,7 @@ export async function downloadYouTubePlaylist({
   ////////////////////////////////////////////////////////////////////
   // STEP 4:                                                        //
   // Massage YouTube's playlist metadata into a format we will use. //
+  // This is partial video metadata.                                //
   ////////////////////////////////////////////////////////////////////
 
   const partialVideosData = playlistItemsApiResponses.reduce<PartialVideo[]>(
@@ -254,8 +256,9 @@ export async function downloadYouTubePlaylist({
 
   log('\n💻 Fetching video data from the YouTube API...')
 
+  const ids = partialVideosData.map(({id}) => id)
   const start2 = performance.now()
-  const videosListApiResponses = await genVideosList({yt, partialVideosData})
+  const videosListApiResponses = await genVideosList({yt, ids})
   const time2 = sanitizeTime(performance.now() - start2)
   const fetchCount2 = videosListApiResponses.length
   const partialVideosDataObj = arrayToIdObject(partialVideosData)
@@ -309,16 +312,10 @@ export async function downloadYouTubePlaylist({
   // This reconciled data is saved locally as a json file.                    //
   //////////////////////////////////////////////////////////////////////////////
 
-  log('\n💾 Reconciling the data & saving as `metadata.json`...')
+  log(`\n💾 Reconciling the data & saving as "${fileAndFolderNames.json}"...`)
   const start3 = performance.now()
   const existingData = await genExistingData(pathData.json)
-  const notFounds = partialVideosData.reduce<Video[]>((acc, video) => {
-    if (video.isUnavailable) {
-      acc.push({...video, durationInSeconds: null, dateCreated: ''})
-    }
-    return acc
-  }, [])
-  const newData = updateLocalVideosData({apiMetadata, existingData, notFounds})
+  const newData = updateLocalVideosData({apiMetadata, existingData})
   await Bun.write(pathData.json, JSON.stringify(newData, null, 2))
 
   const time3 = (performance.now() - start3).toFixed(2)
@@ -328,7 +325,7 @@ export async function downloadYouTubePlaylist({
     log('\n💾 Only `metadata.json` written, no files downloaded.')
 
     return {
-      ...getEmptyResults(),
+      ...getDefaultResults(),
       failures,
       failureCount: failures.length,
       totalVideosDownloaded,
@@ -358,10 +355,11 @@ export async function downloadYouTubePlaylist({
         case 'video':
           return !videoIdSet.has(id)
         case 'both':
-          return !audioIdSet.has(id) && !videoIdSet.has(id)
+          return !audioIdSet.has(id) || !videoIdSet.has(id)
       }
     }
   )
+
   const totalCount = videosToDownload.length
 
   if (downloadType !== 'none') {
@@ -452,7 +450,7 @@ export async function downloadYouTubePlaylist({
   }
 
   return {
-    ...getEmptyResults(),
+    ...getDefaultResults(),
     failures,
     failureCount: failures.length,
     totalVideosDownloaded,

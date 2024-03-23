@@ -103,18 +103,18 @@ export async function genPlaylistItems({
  */
 export async function genVideosList({
   yt,
-  partialVideosData,
+  ids,
 }: {
   yt: youtube_v3.Youtube
-  partialVideosData: PartialVideo[]
+  ids: string[]
 }): Promise<GaxiosResponse<youtube_v3.Schema$VideoListResponse>[]> {
-  const chunksOf50 = chunkArray(partialVideosData, 50)
+  const chunksOfIds = chunkArray(ids, 50)
   const responses: GaxiosResponse<youtube_v3.Schema$VideoListResponse>[] = []
 
-  for (const chunk of chunksOf50) {
+  for (const videoIds of chunksOfIds) {
     const response = await yt.videos.list({
       // Required params.
-      id: chunk.map(item => item.id),
+      id: videoIds,
       part: ['snippet', 'contentDetails'],
       maxResults: 50,
     })
