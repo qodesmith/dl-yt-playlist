@@ -269,14 +269,14 @@ export function updateLocalVideosData({
   })
 }
 
-export function ffmpegCreateAudioFile({
+export function ffmpegCreateAudioFile<T extends {title: string; id: string}>({
   audioPath,
   videoPath,
   video,
 }: {
   audioPath: string
   videoPath: string
-  video: Video
+  video: T
 }) {
   const videoFilePath = `${videoPath}/${video.title} [${video.id}].mp4`
   const audioFilePath = `${audioPath}/${video.title} [${video.id}].mp3`
@@ -346,7 +346,7 @@ export function internalDownloadVideo<T extends {url: string; title: string}>({
   const videoTemplate = [
     '-o',
     `${videoPath}/${title} [%(id)s].%(ext)s`,
-    '--format=mp4',
+    '-f bestvideo*+bestaudio/best',
   ]
 
   const template = (() => {
