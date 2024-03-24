@@ -6,7 +6,6 @@ import {
   parseISO8601Duration,
   genExistingData,
   updateLocalVideosData,
-  downloadVideo,
   ffmpegCreateAudioFile,
   sanitizeTitle,
   getExistingIds,
@@ -20,6 +19,8 @@ import {
   getDefaultResults,
   arrayToIdObject,
   fileAndFolderNames,
+  checkSystemDependencies,
+  internalDownloadVideo,
 } from './utils'
 import {
   genPlaylistItems,
@@ -53,7 +54,7 @@ export async function downloadYouTubePlaylist({
 
   /**
    * 'audio' - will only save videos as mp3 files and include json metadata
-   * 'video' - will only save videos as mp4 files and incluide json metadata
+   * 'video' - will only save videos as mp4 files and include json metadata
    * 'both' - will save videos as mp3 and mp4 files and include json metadata
    * 'none' - will only save json metadata
    */
@@ -113,56 +114,10 @@ export async function downloadYouTubePlaylist({
   // Check if we have `yt-dlp` and `ffmpeg` installed on the system. //
   /////////////////////////////////////////////////////////////////////
 
-  try {
-    const proc = Bun.spawnSync(['yt-dlp', '--version'])
-    const hasStdout = proc.stdout.toString().length !== 0
-    const hasStderr = proc.stderr.toString().length !== 0
-
-    if (!hasStdout || hasStderr) {
-      console.log('Could not find the `yt-dlp` package on this system.')
-      console.log('This package is needed to download YouTube videos.')
-      console.log(
-        'Please head to https://github.com/yt-dlp/yt-dlp for download instructions.'
-      )
-
-      return getDefaultResults()
-    }
-  } catch (e) {
-    console.log('Could not find the `yt-dlp` package on this system.')
-    console.log('This package is needed to download YouTube videos.')
-    console.log(
-      'Please head to https://github.com/yt-dlp/yt-dlp for download instructions.'
-    )
-
+  const missingDepsLoggers = checkSystemDependencies(downloadType)
+  if (missingDepsLoggers.length) {
+    missingDepsLoggers.forEach(fxn => fxn())
     return getDefaultResults()
-  }
-
-  if (downloadType === 'both' || downloadType === 'audio') {
-    try {
-      const proc = Bun.spawnSync(['ffmpeg', '-version'])
-      const hasStdout = proc.stdout.toString().length !== 0
-      const hasStderr = proc.stderr.toString().length !== 0
-
-      if (!hasStdout || hasStderr) {
-        console.log('Could not find the `ffmpeg` package on this system.')
-        console.log(
-          'This package is needed to extract audio from YouTube videos.'
-        )
-        console.log(
-          'You can download a binary at https://www.ffmpeg.org/download.html or run `brew install ffmpeg`.'
-        )
-
-        return getDefaultResults()
-      }
-    } catch (e) {
-      console.log('Could not find the `ffmpeg` package on this system.')
-      console.log(
-        'This package is needed to extract audio from YouTube videos.'
-      )
-      console.log(
-        'You can download a binary at https://www.ffmpeg.org/download.html or run `brew install ffmpeg`.'
-      )
-    }
   }
 
   const isOnline = await genIsOnline()
@@ -374,7 +329,12 @@ export async function downloadYouTubePlaylist({
           log(`(${i + 1} of ${totalCount}) Downloading ${video.title}...`)
 
           // Trigger the download.
-          await downloadVideo({video, downloadType, audioPath, videoPath})
+          await internalDownloadVideo({
+            video,
+            downloadType,
+            audioPath,
+            videoPath,
+          })
           totalVideosDownloaded++
 
           // Extract the audio file.
@@ -425,7 +385,7 @@ export async function downloadYouTubePlaylist({
         log(`${count} Downloading batch of thumbnails...`)
 
         await Promise.all(
-          chunks.map(({url, id, title}) => {
+          chunks.map(({thumbnaillUrl: url, id, title}) => {
             return downloadThumbnailFile({
               url,
               id,
@@ -455,5 +415,88 @@ export async function downloadYouTubePlaylist({
     failureCount: failures.length,
     totalVideosDownloaded,
     totalThumbnailsDownloaded,
+  }
+}
+
+export async function downloadVideo({
+  id,
+  apiKey,
+  directory,
+  downloadType = 'video',
+  downloadThumbnail = false,
+}: {
+  // YouTube video id.
+  id: string
+
+  // YouTube API key.
+  apiKey: string
+
+  // Full path to the directory where you want to save your video.
+  directory: string
+
+  /**
+   * 'audio' - will only save the video as an mp3 file
+   * 'video' - will only save the video as an mp4 file
+   * 'both' - will save the video as an mp3 and mp4 file
+   */
+  downloadType: 'audio' | 'video' | 'both'
+
+  /**
+   * Optional - default value `false`
+   *
+   * Boolean indicating whether to download the video thumbnail as jpg file.
+   */
+  downloadThumbnail?: boolean
+}) {
+  /////////////////////////////////////////////////////////////////////
+  // STEP 1:                                                         //
+  // Check if we have `yt-dlp` and `ffmpeg` installed on the system. //
+  /////////////////////////////////////////////////////////////////////
+
+  const missingDepsLoggers = checkSystemDependencies(downloadType)
+  if (missingDepsLoggers.length) {
+    missingDepsLoggers.forEach(fxn => fxn())
+    return getDefaultResults()
+  }
+
+  const isOnline = await genIsOnline()
+
+  if (!isOnline) {
+    console.log('🛜 Please connect to the internet and try again.')
+    return getDefaultResults()
+  }
+
+  const yt = google.youtube({version: 'v3', auth: apiKey})
+  const videosListApiResponses = await genVideosList({yt, ids: [id]})
+  const videoData = videosListApiResponses[0]?.data.items?.[0]
+
+  if (!videoData) {
+    throw new Error(`No video found for ${id}`)
+  }
+
+  const title = sanitizeFilename(videoData.snippet?.title ?? '')
+  const thumbnaillUrl = videoData.snippet?.thumbnails?.maxres?.url ?? ''
+  const video = {url: `https://www.youtube.com/watch?v=${id}`, title}
+
+  internalDownloadVideo({
+    video,
+    videoPath: directory,
+    audioPath: directory,
+    downloadType,
+  }).catch(error => {
+    console.log(`❌ Failed to download ${id}:`, error)
+  })
+
+  if (downloadThumbnail) {
+    const res = await fetch(thumbnaillUrl, {
+      method: 'GET',
+      headers: {'Content-Type': 'image/jpeg'},
+    })
+
+    if (!res.ok) {
+      throw new Error('Network response was not ok')
+    }
+
+    return Bun.write(`${directory}/${title} [${id}].jpg`, res)
   }
 }

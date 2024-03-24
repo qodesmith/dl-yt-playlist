@@ -4,6 +4,54 @@ import sanitizeFilename from 'sanitize-filename'
 
 export type DownloadType = 'audio' | 'video' | 'both' | 'none'
 
+export function checkSystemDependencies(downloadType: DownloadType) {
+  const messageLoggers: (() => void)[] = []
+
+  try {
+    const proc = Bun.spawnSync(['yt-dlp', '--version'])
+    const hasStdout = proc.stdout.toString().length !== 0
+    const hasStderr = proc.stderr.toString().length !== 0
+
+    if (!hasStdout || hasStderr) {
+      messageLoggers.push(logMissingYtDlp)
+    }
+  } catch (e) {
+    messageLoggers.push(logMissingYtDlp)
+  }
+
+  if (downloadType === 'both' || downloadType === 'audio') {
+    try {
+      const proc = Bun.spawnSync(['ffmpeg', '-version'])
+      const hasStdout = proc.stdout.toString().length !== 0
+      const hasStderr = proc.stderr.toString().length !== 0
+
+      if (!hasStdout || hasStderr) {
+        messageLoggers.push(logMissingFfmpeg)
+      }
+    } catch (e) {
+      messageLoggers.push(logMissingFfmpeg)
+    }
+  }
+
+  return messageLoggers
+}
+
+function logMissingYtDlp() {
+  console.log('\nCould not find the `yt-dlp` package on this system.')
+  console.log('This package is needed to download YouTube videos.')
+  console.log(
+    'Please head to https://github.com/yt-dlp/yt-dlp for download instructions.'
+  )
+}
+
+function logMissingFfmpeg() {
+  console.log('\nCould not find the `ffmpeg` package on this system.')
+  console.log('This package is needed to extract audio from YouTube videos.')
+  console.log(
+    'You can download a binary at https://www.ffmpeg.org/download.html or run `brew install ffmpeg`.'
+  )
+}
+
 export const fileAndFolderNames = {
   audio: 'audio',
   video: 'video',
@@ -271,13 +319,13 @@ export function sanitizeTitle(str: string): string {
   return safeTitle.replace(/\s+/g, ' ')
 }
 
-export function downloadVideo({
+export function internalDownloadVideo<T extends {url: string; title: string}>({
   video,
   downloadType,
   audioPath,
   videoPath,
 }: {
-  video: Video
+  video: T
   downloadType: DownloadType
   audioPath: string
   videoPath: string
