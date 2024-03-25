@@ -1,36 +1,18 @@
+import type {SpawnOptions, Subprocess} from 'bun'
 import fs from 'node:fs'
 import https from 'node:https'
 import sanitizeFilename from 'sanitize-filename'
-
 export type DownloadType = 'audio' | 'video' | 'both' | 'none'
 
 export function checkSystemDependencies(downloadType: DownloadType) {
   const messageLoggers: (() => void)[] = []
+  const ytDlpPath = Bun.which('yt-dlp')
 
-  try {
-    const proc = Bun.spawnSync(['yt-dlp', '--version'])
-    const hasStdout = proc.stdout.toString().length !== 0
-    const hasStderr = proc.stderr.toString().length !== 0
-
-    if (!hasStdout || hasStderr) {
-      messageLoggers.push(logMissingYtDlp)
-    }
-  } catch (e) {
-    messageLoggers.push(logMissingYtDlp)
-  }
+  if (!ytDlpPath) messageLoggers.push(logMissingYtDlp)
 
   if (downloadType === 'both' || downloadType === 'audio') {
-    try {
-      const proc = Bun.spawnSync(['ffmpeg', '-version'])
-      const hasStdout = proc.stdout.toString().length !== 0
-      const hasStderr = proc.stderr.toString().length !== 0
-
-      if (!hasStdout || hasStderr) {
-        messageLoggers.push(logMissingFfmpeg)
-      }
-    } catch (e) {
-      messageLoggers.push(logMissingFfmpeg)
-    }
+    const ffmpegPath = Bun.which('ffmpeg')
+    if (!ffmpegPath) messageLoggers.push(logMissingFfmpeg)
   }
 
   return messageLoggers
@@ -297,19 +279,46 @@ export function ffmpegCreateAudioFile<T extends {title: string; id: string}>({
       cmd,
       onExit(subprocess, exitCode, signalCode, error) {
         if (error || exitCode !== 0) {
-          reject({
-            exitCode,
-            signalCode,
-            error,
-            command: cmd.join(' '),
+          extractStdio(subprocess).then(([stdoutRes, stdinRes, stderrRes]) => {
+            reject({
+              exitCode,
+              signalCode,
+              error,
+              command: cmd.join(' '),
+              stdout: stdoutRes,
+              stdin: stdinRes,
+              stderr: stderrRes,
+            })
           })
         } else {
           resolve()
         }
       },
-      stdio: ['ignore', 'ignore', 'ignore'],
+      stdio: ['pipe', 'pipe', 'pipe'],
     })
   })
+}
+
+async function extractStdio(
+  subprocess: Subprocess<
+    SpawnOptions.Writable,
+    SpawnOptions.Readable,
+    SpawnOptions.Readable
+  >
+) {
+  const {stdout, stdin, stderr} = subprocess
+
+  const stdinPromise = Promise.resolve(
+    stdin instanceof ReadableStream ? Bun.readableStreamToText(stdin) : stdin
+  )
+  const stdoutPromise = Promise.resolve(
+    stdout instanceof ReadableStream ? Bun.readableStreamToText(stdout) : stdout
+  )
+  const stderrPromise = Promise.resolve(
+    stderr instanceof ReadableStream ? Bun.readableStreamToText(stderr) : stderr
+  )
+
+  return Promise.all([stdinPromise, stdoutPromise, stderrPromise])
 }
 
 export function sanitizeTitle(str: string): string {
@@ -376,6 +385,9 @@ export function internalDownloadVideo<T extends {url: string; title: string}>({
             signalCode,
             error,
             command: cmd.join(' '),
+            stdout: subprocess.stdout,
+            stdin: subprocess.stdin,
+            stderr: subprocess.stderr,
           })
         } else {
           resolve()
@@ -393,13 +405,13 @@ export function internalDownloadVideo<T extends {url: string; title: string}>({
  */
 export function getThumbnailsToBeDownloaded({
   videos,
-  directory,
+  thumbnailDirectory,
 }: {
   videos: Video[]
-  directory: ReturnType<typeof createPathData>['thumbnails']
+  thumbnailDirectory: ReturnType<typeof createPathData>['thumbnails']
 }): Video[] {
   const thumbnailSet = new Set(
-    fs.readdirSync(directory).reduce<string[]>((acc, str) => {
+    fs.readdirSync(thumbnailDirectory).reduce<string[]>((acc, str) => {
       if (str.endsWith('.jpg')) {
         const id = str.split('.')[0] as string
         acc.push(id)
@@ -419,11 +431,11 @@ export function getThumbnailsToBeDownloaded({
 export async function downloadThumbnailFile({
   url,
   id,
-  directory,
+  thumbnailDirectory,
 }: {
   url: string
   id: string
-  directory: ReturnType<typeof createPathData>['thumbnails']
+  thumbnailDirectory: ReturnType<typeof createPathData>['thumbnails']
 }) {
   const res = await fetch(url, {
     method: 'GET',
@@ -434,7 +446,7 @@ export async function downloadThumbnailFile({
     throw new Error('Network response was not ok')
   }
 
-  return Bun.write(`${directory}/${id}.jpg`, res)
+  return Bun.write(`${thumbnailDirectory}/${id}.jpg`, res)
 }
 
 export function getExistingIds({
@@ -480,9 +492,9 @@ export function getExistingIds({
 export const squareBracketIdRegex = /\[([a-zA-Z0-9_-]+)\]\.\w+$/
 
 function getExistingVideoIdsSet(
-  directory: ReturnType<typeof createPathData>['audio' | 'video']
+  audioOrVideoDirectory: ReturnType<typeof createPathData>['audio' | 'video']
 ): Set<string> {
-  return fs.readdirSync(directory).reduce((set, fileName) => {
+  return fs.readdirSync(audioOrVideoDirectory).reduce((set, fileName) => {
     const id = fileName.match(squareBracketIdRegex)?.[1]
     if (id) set.add(id)
 

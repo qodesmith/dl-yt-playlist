@@ -371,7 +371,7 @@ export async function downloadYouTubePlaylist({
   if (downloadThumbnails) {
     const videosNeedingThumbnails = getThumbnailsToBeDownloaded({
       videos: videosToDownload,
-      directory: pathData.thumbnails,
+      thumbnailDirectory: pathData.thumbnails,
     })
 
     if (videosNeedingThumbnails.length) {
@@ -389,7 +389,7 @@ export async function downloadYouTubePlaylist({
             return downloadThumbnailFile({
               url,
               id,
-              directory: pathData.thumbnails,
+              thumbnailDirectory: pathData.thumbnails,
             })
               .then(() => {
                 totalThumbnailsDownloaded++
@@ -476,16 +476,30 @@ export async function downloadVideo({
 
   const title = sanitizeFilename(videoData.snippet?.title ?? '')
   const thumbnaillUrl = videoData.snippet?.thumbnails?.maxres?.url ?? ''
-  const video = {url: `https://www.youtube.com/watch?v=${id}`, title}
+  const video = {url: `https://www.youtube.com/watch?v=${id}`, title, id}
 
-  internalDownloadVideo({
+  await internalDownloadVideo({
     video,
     videoPath: directory,
     audioPath: directory,
     downloadType,
   }).catch(error => {
-    console.log(`❌ Failed to download ${id}:`, error)
+    console.log(`❌ Failed to download video ${id}:`, error)
+    process.exit(1)
   })
+
+  // Extract the audio file.
+  if (downloadType === 'both') {
+    try {
+      await ffmpegCreateAudioFile({
+        audioPath: directory,
+        videoPath: directory,
+        video,
+      })
+    } catch (error) {
+      console.log(`❌ Failed to convert video to audio:`, error)
+    }
+  }
 
   if (downloadThumbnail) {
     const res = await fetch(thumbnaillUrl, {

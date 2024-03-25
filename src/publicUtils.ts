@@ -153,7 +153,7 @@ function addUnaccountedForVideos({
 }
 
 export async function downloadMissingThumbnails(playlistDirectory: string) {
-  const thumbnailDir =
+  const thumbnailDirectory =
     `${playlistDirectory}/${fileAndFolderNames.thumbnails}` as const
   const jsonFilePath = `${playlistDirectory}/${fileAndFolderNames.json}`
 
@@ -163,7 +163,7 @@ export async function downloadMissingThumbnails(playlistDirectory: string) {
    */
   const videoMetadata: Video[] = await Bun.file(jsonFilePath).json()
   const currentThumbnailIdsSet = fs
-    .readdirSync(thumbnailDir)
+    .readdirSync(thumbnailDirectory)
     .reduce<Set<string>>((set, item) => {
       if (item.endsWith('.jpg')) {
         set.add(item.split('.')[0] as string)
@@ -194,7 +194,7 @@ export async function downloadMissingThumbnails(playlistDirectory: string) {
         return downloadThumbnailFile({
           url,
           id,
-          directory: thumbnailDir,
+          thumbnailDirectory,
         })
           .then(() => {
             totalThumbnailsDownloaded++
