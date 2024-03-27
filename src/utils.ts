@@ -1,6 +1,7 @@
-import type {SpawnOptions, Subprocess} from 'bun'
+import type {Errorlike, SpawnOptions, Subprocess} from 'bun'
 import fs from 'node:fs'
 import https from 'node:https'
+import path from 'node:path'
 import sanitizeFilename from 'sanitize-filename'
 export type DownloadType = 'audio' | 'video' | 'both' | 'none'
 
@@ -255,14 +256,16 @@ export function ffmpegCreateAudioFile<T extends {title: string; id: string}>({
   audioPath,
   videoPath,
   video,
+  videoFileExtension,
 }: {
   audioPath: string
   videoPath: string
   video: T
+  videoFileExtension: string
 }) {
-  const videoFilePath = `${videoPath}/${video.title} [${video.id}].mp4`
+  const videoFilePath = `${videoPath}/${video.title} [${video.id}]${videoFileExtension}`
   const audioFilePath = `${audioPath}/${video.title} [${video.id}].mp3`
-  const cmd = [
+  const ffmpegCmd = [
     'ffmpeg',
     '-i',
     videoFilePath,
@@ -274,25 +277,41 @@ export function ffmpegCreateAudioFile<T extends {title: string; id: string}>({
     audioFilePath,
   ]
 
-  return new Promise<void>((resolve, reject) => {
+  return new Promise<{
+    exitCode: number
+    signalCode: number | null
+    error: Errorlike | undefined
+    command: string[]
+    stdin: Awaited<ReturnType<typeof extractStdio>>['stdinRes']
+    stdout: Awaited<ReturnType<typeof extractStdio>>['stdoutRes']
+    stderr: Awaited<ReturnType<typeof extractStdio>>['stderrRes']
+  }>((resolve, reject) => {
     Bun.spawn({
-      cmd,
+      cmd: ffmpegCmd,
       onExit(subprocess, exitCode, signalCode, error) {
-        if (error || exitCode !== 0) {
-          extractStdio(subprocess).then(([stdoutRes, stdinRes, stderrRes]) => {
+        extractStdio(subprocess).then(({stdinRes, stdoutRes, stderrRes}) => {
+          if (error || exitCode !== 0) {
             reject({
               exitCode,
               signalCode,
               error,
-              command: cmd.join(' '),
-              stdout: stdoutRes,
+              command: ffmpegCmd,
               stdin: stdinRes,
+              stdout: stdoutRes,
               stderr: stderrRes,
             })
-          })
-        } else {
-          resolve()
-        }
+          } else {
+            resolve({
+              exitCode,
+              signalCode,
+              error,
+              command: ffmpegCmd,
+              stdin: stdinRes,
+              stdout: stdoutRes,
+              stderr: stderrRes,
+            })
+          }
+        })
       },
       stdio: ['pipe', 'pipe', 'pipe'],
     })
@@ -306,7 +325,7 @@ async function extractStdio(
     SpawnOptions.Readable
   >
 ) {
-  const {stdout, stdin, stderr} = subprocess
+  const {stdin, stdout, stderr} = subprocess
 
   const stdinPromise = Promise.resolve(
     stdin instanceof ReadableStream ? Bun.readableStreamToText(stdin) : stdin
@@ -318,7 +337,15 @@ async function extractStdio(
     stderr instanceof ReadableStream ? Bun.readableStreamToText(stderr) : stderr
   )
 
-  return Promise.all([stdinPromise, stdoutPromise, stderrPromise])
+  return Promise.all([stdinPromise, stdoutPromise, stderrPromise]).then(
+    ([stdinRes, stdoutRes, stderrRes]) => {
+      return {
+        stdinRes,
+        stdoutRes,
+        stderrRes,
+      }
+    }
+  )
 }
 
 export function sanitizeTitle(str: string): string {
@@ -328,16 +355,20 @@ export function sanitizeTitle(str: string): string {
   return safeTitle.replace(/\s+/g, ' ')
 }
 
-export function internalDownloadVideo<T extends {url: string; title: string}>({
+export async function internalDownloadVideo<
+  T extends {url: string; title: string}
+>({
   video,
   downloadType,
   audioPath,
   videoPath,
+  isSingleDownload,
 }: {
   video: T
   downloadType: DownloadType
   audioPath: string
   videoPath: string
+  isSingleDownload?: boolean
 }) {
   /**
    * Video titles may have special characters in them, but the JSON data
@@ -355,7 +386,7 @@ export function internalDownloadVideo<T extends {url: string; title: string}>({
   const videoTemplate = [
     '-o',
     `${videoPath}/${title} [%(id)s].%(ext)s`,
-    '-f bestvideo*+bestaudio/best',
+    isSingleDownload ? '-f bestvideo*+bestaudio/best' : '--format=mp4',
   ]
 
   const template = (() => {
@@ -373,27 +404,95 @@ export function internalDownloadVideo<T extends {url: string; title: string}>({
     }
   })()
 
-  return new Promise<void>((resolve, reject) => {
-    const cmd = ['yt-dlp', ...template, url]
+  const downloadCmd = ['yt-dlp', ...template, url]
+  const getNameCmd = ['yt-dlp', '--print=filename', ...template, url]
 
-    Bun.spawn({
-      cmd,
-      onExit(subprocess, exitCode, signalCode, error) {
-        if (error || exitCode !== 0) {
-          reject({
-            exitCode,
-            signalCode,
-            error,
-            command: cmd.join(' '),
-            stdout: subprocess.stdout,
-            stdin: subprocess.stdin,
-            stderr: subprocess.stderr,
+  /**
+   * When downloading a single video, we ask yt-dlp for the highest quality
+   * video available. We don't know what that format will be, so we first need
+   * to do a "dry run", having yt-dlp tell us what format it will download.
+   */
+  const filenamePromise = new Promise<string | void>((resolve, reject) => {
+    if (isSingleDownload) {
+      Bun.spawn({
+        cmd: getNameCmd,
+        onExit(subprocess, exitCode, signalCode, error) {
+          extractStdio(subprocess).then(({stdinRes, stdoutRes, stderrRes}) => {
+            if (error || exitCode !== 0) {
+              reject({
+                exitCode,
+                signalCode,
+                error,
+                command: getNameCmd,
+                stdin: stdinRes,
+                stdout: stdoutRes,
+                stderr: stderrRes,
+              })
+            } else if (!stdoutRes || typeof stdoutRes !== 'string') {
+              reject({
+                exitCode,
+                signalCode,
+                error: new Error('Did not receive a string for the filename'),
+                command: getNameCmd,
+                stdin: stdinRes,
+                stdout: stdoutRes,
+                stderr: stderrRes,
+              })
+            } else {
+              const fileExtension = path.parse(stdoutRes.trim()).ext
+              resolve(fileExtension)
+            }
           })
-        } else {
-          resolve()
-        }
-      },
-      stdio: ['ignore', 'ignore', 'ignore'],
+        },
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
+    } else {
+      resolve()
+    }
+  })
+
+  return filenamePromise.then(videoFileExtension => {
+    return new Promise<{
+      videoFileExtension: string | void
+      exitCode: number | null
+      signalCode: number | null
+      error: Errorlike | undefined
+      command: string[]
+      stdin: Awaited<ReturnType<typeof extractStdio>>['stdinRes']
+      stdout: Awaited<ReturnType<typeof extractStdio>>['stdoutRes']
+      stderr: Awaited<ReturnType<typeof extractStdio>>['stderrRes']
+    }>((resolve, reject) => {
+      Bun.spawn({
+        cmd: downloadCmd,
+        onExit(subprocess, exitCode, signalCode, error) {
+          extractStdio(subprocess).then(({stdoutRes, stdinRes, stderrRes}) => {
+            if (error || exitCode !== 0) {
+              reject({
+                videoFileExtension,
+                exitCode,
+                signalCode,
+                error,
+                command: downloadCmd,
+                stdout: stdoutRes,
+                stdin: stdinRes,
+                stderr: stderrRes,
+              })
+            } else {
+              resolve({
+                videoFileExtension,
+                exitCode,
+                signalCode,
+                error,
+                command: downloadCmd,
+                stdout: stdoutRes,
+                stdin: stdinRes,
+                stderr: stderrRes,
+              })
+            }
+          })
+        },
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
     })
   })
 }

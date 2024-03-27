@@ -340,7 +340,12 @@ export async function downloadYouTubePlaylist({
           // Extract the audio file.
           if (downloadType === 'both') {
             try {
-              await ffmpegCreateAudioFile({audioPath, videoPath, video})
+              await ffmpegCreateAudioFile({
+                audioPath,
+                videoPath,
+                video,
+                videoFileExtension: '.mp4',
+              })
             } catch (error) {
               failures.push({
                 url: video.url,
@@ -478,11 +483,12 @@ export async function downloadVideo({
   const thumbnaillUrl = videoData.snippet?.thumbnails?.maxres?.url ?? ''
   const video = {url: `https://www.youtube.com/watch?v=${id}`, title, id}
 
-  await internalDownloadVideo({
+  const dlResponse = await internalDownloadVideo({
     video,
     videoPath: directory,
     audioPath: directory,
     downloadType,
+    isSingleDownload: true,
   }).catch(error => {
     console.log(`❌ Failed to download video ${id}:`, error)
     process.exit(1)
@@ -491,10 +497,16 @@ export async function downloadVideo({
   // Extract the audio file.
   if (downloadType === 'both') {
     try {
+      const {videoFileExtension} = dlResponse
+      if (!videoFileExtension) {
+        throw new Error('No `filename` found in download response')
+      }
+
       await ffmpegCreateAudioFile({
         audioPath: directory,
         videoPath: directory,
         video,
+        videoFileExtension,
       })
     } catch (error) {
       console.log(`❌ Failed to convert video to audio:`, error)
