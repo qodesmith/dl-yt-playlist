@@ -16,46 +16,108 @@ The type signature looks like this:
 
 ```typescript
 downloadYoutubePlaylist({
-  // YouTube playlist id.
+  /** YouTube playlist id. */
   playlistId: string
 
-  // YouTube API key.
-  apiKey: string
+  /**
+   * YouTube API key. This will be used to fetch all metadata for videos in the
+   * playlist.
+   */
+  youTubeApiKey: string
 
-  // Full path to the directory where you want to save your data.
+  /**
+   * The absolute path to where the data should be stored. Sub-folders will be
+   * created as needed. The folder structure will be:
+   *
+   * - `<directory>/metadata.json` - an array of objects (`Video[]`)
+   * - `<directory>/audio` - contains the audio files
+   * - `<directory>/video` - contains the video files
+   * - `<directory>/thumbnails` - contains the jpg thumbnail files
+   */
   directory: string
 
   /**
-   * 'audio' - will only save videos as mp3 files and include json metadata
-   * 'video' - will only save videos as mp4 files and incluide json metadata
-   * 'both' - will save videos as mp3 and mp4 files and include json metadata
-   * 'none' - will only save json metadata
+   * `'none'`  - No files will be downloaded, including thumbnails. Only the
+   *             `metadata.json` file will be written.
+   *
+   * `'audio'` - Download only audio files as determined by the `audioFormat`
+   *             option. Defaults to `'mp3'`.
+   *
+   * `'video'` - Download only video files as determined by the `videoFormat`
+   *             option. Defaults to `'mp4'`
+   *
+   * `'both'`  - Download audio and video files as determined by their
+   *             corresponding format options.
    */
   downloadType: DownloadType
 
   /**
+   * Optional - default value `'mp3'`
+   *
+   * A valid ffmpeg audio [format](https://github.com/yt-dlp/yt-dlp?tab=readme-ov-file#format-selection) string.
+   */
+  audioFormat?: string
+
+  /**
+   * Optional - default value `'mp4'`
+   *
+   * A valid ffmpeg video [format](https://github.com/yt-dlp/yt-dlp?tab=readme-ov-file#format-selection) string.
+   */
+  videoFormat?: string
+
+  /**
    * Optional - default value `false`
    *
-   * Boolean indicating if the full playlist data get's fetched or not.
-   *
-   * `true`  - download all items in the playlist
-   * `false` - download only the 50 most recent items in the playlist
+   * A boolean indicating wether to download a `.jpg` thumbnail for each video.
+   * The highest resolution available will be downloaded. Only thumbnails for
+   * new videos will be downloaded.
    */
-  includeFullData?: boolean
+  downloadThumbnails?: boolean
 
   /**
    * Optional - default value `Infinity`
    *
-   * The maximum duration a playlist item can be to be downloaded.
+   * The maximum duration in seconds a playlist item can be to be downloaded.
    */
   maxDurationSeconds?: number
 
   /**
+   * Optional - default value `undefined`
+   *
+   * A _positive_ number (max of 50) indicating how many items in the playlist
+   * to retrieve, starting with the most recent. Negative and invalid numbers
+   * will be ignored. All items will be retrieved if no value is provided.
+   *
+   * I.e. `mostRecentItemsCount: 20` will only retrieve data for the most recent
+   * 20 videos in the playlist. This option is useful when running in a cron job
+   * to avoid fetching and parsing the entire list when you may already have a
+   * substantial portion processed and downloaded already.
+   */
+  mostRecentItemsCount?: number
+
+  /**
    * Optional - default value `false`
    *
-   * Boolean indicating whether to download the video thumbnails as jpg files.
+   * Boolean indicating wether to silence all internal console.log's.
    */
-  downloadThumbnails?: boolean
+  silent?: boolean
+
+  /**
+   * Options - default value `4`
+   *
+   * The number of concurrent fetch calls made to the YouTube
+   * [VideosList API](https://developers.google.com/youtube/v3/docs/videos/list).
+   */
+  maxConcurrentFetchCalls?: number
+
+  /**
+   * Options - default value `10`
+   *
+   * The number of concurrent downloads to process. We use
+   * [Bun's shell](https://bun.sh/docs/runtime/shell) to asychronously execute
+   * the [yt-dlp](https://github.com/yt-dlp/yt-dlp) command.
+   */
+  maxConcurrentYtdlpCalls?: number
 
   /**
    * Optiona - default value `false`
@@ -68,33 +130,7 @@ downloadYoutubePlaylist({
    * - youtubeVideoResponses.json
    */
   saveRawResponses?: boolean
-
-  /**
-   * Optional - default value `false`
-   *
-   * Boolean indicating wether to silence all internal console.log's. This will
-   * not silence messages indicating missing `yt-dlp` or being offline.
-   */
-  silent?: boolean
-}): Promise<{
-  failures: {
-    url: string // The url of failed resource.
-    title: string // The video title.
-    error: unknown
-
-    /**
-     * 'video' - the attempted download was a YouTube video.
-     * 'thumbnail' - the attempted download was a thumbnail image.
-     * 'ffmpeg' - ffmpeg failed to convert the downloaded video into an mp3 file.
-     */
-    type: 'video' | 'thumbnail' | 'ffmpeg'
-  }[]
-  failureCount: number
-  date: string // new Date().toLocaleDateString()
-  dateNum: number // Date.now()
-  totalVideosDownloaded: number
-  totalThumbnailsDownloaded: number
-}>
+}): Promise<FailuresObj>
 ```
 
 ## Folder Structure
@@ -121,11 +157,11 @@ directory-you-provided
 <table>
   <tr>
     <td><code>/video</code></td>
-    <td>This folder will contain all the mp4 video files</td>
+    <td>This folder will contain all the video files (file extension is dependent upon `audioFormat` option).</td>
   </tr>
   <tr>
     <td><code>/audio</code></td>
-    <td>This folder will contain all the mp3 audio files</td>
+    <td>This folder will contain all the audio files (file extension is dependent upon `videoFormat` option).</td>
   </tr>
   <tr>
     <td><code>/thumbnails</code></td>
@@ -147,25 +183,29 @@ directory-you-provided
 
 ## Metadata Shape
 
-Each video will have metadata stored in the `metadata.json` with the following shape:
+Each video will have metadata stored in the `metadata.json` file with the following shape:
 
 ```typescript
 {
   id: string
   title: string
+  description: string
   channelId: string
   channelName: string
-  dateAddedToPlaylist: string
-  durationInSeconds: number | null
-  url: string
-  thumbnaillUrl: string
   dateCreated: string
+  dateAddedToPlaylist: string
+  thumbnailUrl: string | null
+  durationInSeconds: number
+  url: string
+  channelUrl: string | null
+  audioFileExtension: string | null
+  videoFileExtension: string | null
 
   /**
    * This value will be changed to `true` when future API calls are made and the
    * video is found to be unavailable. This will allow us to retain previously
    * fetch metadata.
    */
-  isUnavailable?: boolean
+  isUnavailable: boolean
 }
 ```

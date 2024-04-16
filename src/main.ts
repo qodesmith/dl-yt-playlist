@@ -7,13 +7,12 @@ import cliProgress from 'cli-progress'
 import sanitizeFilename from 'sanitize-filename'
 import {
   safeParse,
-  parse,
   object,
   string,
   optional,
   array,
   minLength,
-  mimeType,
+  SchemaIssues,
 } from 'valibot'
 
 export type Video = {
@@ -55,6 +54,44 @@ type PartialVideo = Omit<
 type PartialVideoWithDuration = PartialVideo & Pick<Video, 'durationInSeconds'>
 
 export type DownloadType = 'audio' | 'video' | 'both' | 'none'
+
+export type Failure = {date: number} & (
+  | {
+      type: 'Bun.write'
+      file: string
+      error: unknown
+    }
+  | {
+      type: 'schemaParse'
+      schemaName:
+        | 'PlaylistItemSchema'
+        | 'VideosListItemSchema'
+        | 'YtDlpJsonSchema'
+      issues: SchemaIssues
+    }
+  | {
+      type: 'videosListApi'
+      error: unknown
+      ids: string[] | undefined
+    }
+  | {
+      type: 'partialVideoNotFound'
+      id: string
+    }
+  | {
+      type: 'ytdlpFailure'
+      url: string
+      template: string
+      stderr: string
+    }
+  | {
+      type: 'downloadThumbnail'
+      status: number
+      statusText: string
+    }
+)
+
+export type FailuresObj = Record<Failure['type'], Omit<Failure, 'type'>[]>
 
 /**
  * This schema is used to parse the response from the YouTube
@@ -117,6 +154,7 @@ export async function downloadYouTubePlaylist({
   silent = false,
   maxConcurrentFetchCalls = 4,
   maxConcurrentYtdlpCalls = 10,
+  saveRawResponses = false,
 }: {
   /** YouTube playlist id. */
   playlistId: string
@@ -205,16 +243,37 @@ export async function downloadYouTubePlaylist({
   silent?: boolean
 
   /**
-   * Options - default value `4`
+   * Optional - default value `4`
    *
    * The number of concurrent fetch calls made to the YouTube
    * [VideosList API](https://developers.google.com/youtube/v3/docs/videos/list).
    */
   maxConcurrentFetchCalls?: number
+
+  /**
+   * Optional - default value `10`
+   *
+   * The number of concurrent downloads to process. We use
+   * [Bun's shell](https://bun.sh/docs/runtime/shell) to asychronously execute
+   * the [yt-dlp](https://github.com/yt-dlp/yt-dlp) command.
+   */
   maxConcurrentYtdlpCalls?: number
-}) {
+
+  /**
+   * Optional - default value `false`
+   *
+   * Boolean indicating whether to save the response data directly from the
+   * YouTube API. This can be helpful for debugging. If set to `true`, two files
+   * will be saved:
+   *
+   * - youtubePlaylistResponses.json
+   * - youtubeVideoResponses.json
+   */
+  saveRawResponses?: boolean
+}): Promise<FailuresObj> {
   const log = silent ? () => {} : console.log
   const processStart = performance.now()
+  const failures: Failure[] = []
 
   /**
    * *********
@@ -258,6 +317,7 @@ export async function downloadYouTubePlaylist({
       '\n Could not find the directory provided. Please check the path or create it.'
     )
   }
+
   if (ytDlpPath === null || ffmpegPath === null || !directoryExists) {
     process.exit(1)
   }
@@ -290,6 +350,23 @@ export async function downloadYouTubePlaylist({
     playlistId,
     mostRecentItemsCount,
   })
+
+  if (saveRawResponses) {
+    try {
+      await Bun.write(
+        `${directory}/youtubePlaylistResponses.json`,
+        JSON.stringify(playlistItemsResponses, null, 2)
+      )
+    } catch (error) {
+      failures.push({
+        type: 'Bun.write',
+        file: 'youtubePlaylistResponses.json',
+        error,
+        date: Date.now(),
+      })
+    }
+  }
+
   const partialVideosMetadata: PartialVideo[] = playlistItemsResponses.reduce<
     PartialVideo[]
   >((acc, response) => {
@@ -299,39 +376,36 @@ export async function downloadYouTubePlaylist({
         item.snippet?.title === 'Deleted video'
       const results = safeParse(PlaylistItemSchema, item)
 
-      // TODO - return issues in a consumable way
       if (!results.success) {
-        console.log('\nRESPONSE:', item)
-
-        results.issues.forEach((issue, i) => {
-          console.log('\nISSUE', i + 1)
-          console.log(issue)
+        failures.push({
+          type: 'schemaParse',
+          schemaName: 'PlaylistItemSchema',
+          issues: results.issues,
+          date: Date.now(),
         })
+      } else {
+        const {snippet, contentDetails} = results.output
 
-        throw new Error('Error parsing!')
+        acc.push({
+          id: snippet.resourceId.videoId,
+          title: sanitizeTitle(snippet.title),
+          description: snippet.description,
+          channelId: snippet.videoOwnerChannelId,
+          channelName: snippet.videoOwnerChannelTitle,
+          dateCreated: contentDetails.videoPublishedAt,
+          dateAddedToPlaylist: snippet.publishedAt,
+          thumbnailUrl:
+            snippet.thumbnails.maxres?.url ??
+            snippet.thumbnails.standard?.url ??
+            snippet.thumbnails.high?.url ??
+            snippet.thumbnails.medium?.url ??
+            snippet.thumbnails.default?.url ??
+            null,
+          url: `https://www.youtube.com/watch?v=${snippet.resourceId.videoId}`,
+          channelUrl: `https://www.youtube.com/channel/${snippet.videoOwnerChannelId}`,
+          isUnavailable,
+        })
       }
-
-      const {snippet, contentDetails} = results.output
-
-      acc.push({
-        id: snippet.resourceId.videoId,
-        title: sanitizeTitle(snippet.title),
-        description: snippet.description,
-        channelId: snippet.videoOwnerChannelId,
-        channelName: snippet.videoOwnerChannelTitle,
-        dateCreated: contentDetails.videoPublishedAt,
-        dateAddedToPlaylist: snippet.publishedAt,
-        thumbnailUrl:
-          snippet.thumbnails.maxres?.url ??
-          snippet.thumbnails.standard?.url ??
-          snippet.thumbnails.high?.url ??
-          snippet.thumbnails.medium?.url ??
-          snippet.thumbnails.default?.url ??
-          null,
-        url: `https://www.youtube.com/watch?v=${snippet.resourceId.videoId}`,
-        channelUrl: `https://www.youtube.com/channel/${snippet.videoOwnerChannelId}`,
-        isUnavailable,
-      })
     })
 
     return acc
@@ -362,7 +436,9 @@ export async function downloadYouTubePlaylist({
    * to fetch additional metadata for each video
    */
   const videosListResponses = await chunkedVideoIdsToFetch.reduce<
-    Promise<GaxiosResponse<google.youtube_v3.Schema$VideoListResponse>[]>
+    Promise<
+      (GaxiosResponse<google.youtube_v3.Schema$VideoListResponse> | null)[]
+    >
   >((promise, ids) => {
     const idsForPromises = chunkArray(ids, maxConcurrentFetchCalls)
 
@@ -375,22 +451,71 @@ export async function downloadYouTubePlaylist({
       return yt.videos.list({id: idsForPromise, part: ['contentDetails']})
     })
 
-    return promise.then(previousResults =>
-      Promise.all(promises).then(results => previousResults.concat(results))
-    )
+    return promise.then(previousResults => {
+      return Promise.allSettled(promises).then(results => {
+        const successfulResults: (GaxiosResponse<google.youtube_v3.Schema$VideoListResponse> | null)[] =
+          []
+
+        results.forEach((response, resultIndex) => {
+          if (response.status === 'fulfilled') {
+            successfulResults.push(response.value)
+          } else {
+            failures.push({
+              type: 'videosListApi',
+              error: response.reason,
+              ids: idsForPromises[resultIndex],
+              date: Date.now(),
+            })
+            successfulResults.push(null)
+          }
+        })
+
+        return previousResults.concat(successfulResults)
+      })
+    })
   }, Promise.resolve([]))
+
+  if (saveRawResponses) {
+    try {
+      await Bun.write(
+        `${directory}/youtubeVideoResponses.json`,
+        JSON.stringify(videosListResponses, null, 2)
+      )
+    } catch (error) {
+      failures.push({
+        type: 'Bun.write',
+        file: 'youtubeVideoResponses.json',
+        error,
+        date: Date.now(),
+      })
+    }
+  }
+
   const durationsObj = videosListResponses.reduce<Record<string, number>>(
     (acc, response) => {
-      response.data.items?.forEach(item => {
-        const {id, contentDetails} = parse(VideosListItemSchema, item)
+      response?.data.items?.forEach(item => {
+        const parsedResults = safeParse(VideosListItemSchema, item)
+
+        if (!parsedResults.success) {
+          failures.push({
+            type: 'schemaParse',
+            schemaName: 'VideosListItemSchema',
+            issues: parsedResults.issues,
+            date: Date.now(),
+          })
+
+          return
+        }
+
+        const {id, contentDetails} = parsedResults.output
         const duration = contentDetails.duration
         const partialVideo = partialVideosMetadataObj[id]
 
         if (!partialVideo) {
-          throw new Error(`No partial video found for ${id}`)
+          failures.push({type: 'partialVideoNotFound', id, date: Date.now()})
+        } else {
+          acc[id] = parseISO8601DurationToSeconds(duration)
         }
-
-        acc[id] = parseISO8601DurationToSeconds(duration)
       })
 
       return acc
@@ -435,6 +560,7 @@ export async function downloadYouTubePlaylist({
             return acc
           }, [])
         } catch {
+          // The directory doesn't exist yet. We'll create it later.
           return []
         }
       })()
@@ -493,7 +619,7 @@ export async function downloadYouTubePlaylist({
    * extensions are retrieved from yt-dlp's json and added to the metadata.
    */
   const downloadPromiseFxns = potentialVideosToDownload.reduce<
-    (() => Promise<Video>)[]
+    (() => Promise<Video | null>)[]
   >((acc, partialVideo) => {
     const {id, title, url} = partialVideo
     const audioExistsOnDisk = existingAudioIdsOnDiskSet.has(id)
@@ -506,14 +632,35 @@ export async function downloadYouTubePlaylist({
         .quiet()
         .then(({exitCode, stdout, stderr}) => {
           if (exitCode !== 0) {
-            // TODO - do something with this error.
-            throw new Error(stderr.toString())
+            failures.push({
+              type: 'ytdlpFailure',
+              url,
+              template: `yt-dlp -o "${videoTemplate}" --format="${videoFormat}" --extract-audio --audio-format="${audioFormat}" -k -J --no-simulate ${url}`,
+              stderr: stderr.toString(),
+              date: Date.now(),
+            })
+
+            return null
           }
 
-          const {ext: videoFileExtension, requested_downloads} = parse(
+          const parsedResults = safeParse(
             YtDlpJsonSchema,
             JSON.parse(stdout.toString())
           )
+
+          if (!parsedResults.success) {
+            failures.push({
+              type: 'schemaParse',
+              schemaName: 'YtDlpJsonSchema',
+              issues: parsedResults.issues,
+              date: Date.now(),
+            })
+
+            return null
+          }
+
+          const {ext: videoFileExtension, requested_downloads} =
+            parsedResults.output
           const audioFileExtension = requested_downloads[0]!.ext
           const oldAudioPath = `${videoDir}/${title} [${id}].${audioFileExtension}`
           const newAudioPath = `${audioDir}/${title} [${id}].${audioFileExtension}`
@@ -526,26 +673,41 @@ export async function downloadYouTubePlaylist({
     }
 
     const videoPromiseFxn = () => {
-      return $`yt-dlp -o "${videoTemplate}" --format="${videoFormat}" -J --no-simulate ${partialVideo.url}`
+      return $`yt-dlp -o "${videoTemplate}" --format="${videoFormat}" -J --no-simulate ${url}`
         .quiet()
         .then(({exitCode, stdout, stderr}) => {
           if (exitCode !== 0) {
-            // TODO - do something with this error.
-            throw new Error(stderr.toString())
+            failures.push({
+              type: 'ytdlpFailure',
+              url,
+              template: `yt-dlp -o "${videoTemplate}" --format="${videoFormat}" -J --no-simulate ${url}`,
+              stderr: stderr.toString(),
+              date: Date.now(),
+            })
+
+            return null
           }
 
-          const {ext: videoFileExtension} = parse(
+          const parsedResults = safeParse(
             YtDlpJsonSchema,
             JSON.parse(stdout.toString())
           )
 
+          if (!parsedResults.success) {
+            failures.push({
+              type: 'schemaParse',
+              schemaName: 'YtDlpJsonSchema',
+              issues: parsedResults.issues,
+              date: Date.now(),
+            })
+
+            return null
+          }
+
+          const {ext: videoFileExtension} = parsedResults.output
           videoProgressBar.increment()
 
-          return {
-            ...partialVideo,
-            audioFileExtension: null,
-            videoFileExtension,
-          }
+          return {...partialVideo, audioFileExtension: null, videoFileExtension}
         })
     }
 
@@ -554,15 +716,34 @@ export async function downloadYouTubePlaylist({
         .quiet()
         .then(({exitCode, stdout, stderr}) => {
           if (exitCode !== 0) {
-            // TODO - do something with this error.
-            throw new Error(stderr.toString())
+            failures.push({
+              type: 'ytdlpFailure',
+              url,
+              template: `yt-dlp -o "${audioTemplate}" --extract-audio --audio-format="${audioFormat}" -J --no-simulate ${url}`,
+              stderr: stderr.toString(),
+              date: Date.now(),
+            })
+
+            return null
           }
 
-          const {requested_downloads} = parse(
+          const parsedResults = safeParse(
             YtDlpJsonSchema,
             JSON.parse(stdout.toString())
           )
 
+          if (!parsedResults.success) {
+            failures.push({
+              type: 'schemaParse',
+              schemaName: 'YtDlpJsonSchema',
+              issues: parsedResults.issues,
+              date: Date.now(),
+            })
+
+            return null
+          }
+
+          const {requested_downloads} = parsedResults.output
           videoProgressBar.increment()
 
           return {
@@ -632,28 +813,46 @@ export async function downloadYouTubePlaylist({
     maxConcurrentYtdlpCalls
   )
 
-  // TODO - use promise.allSettled instead to handle errors better.
   /**
    * The actual download!
    */
   const freshMetadata = await promiseFxnBatches.reduce<Promise<Video[]>>(
     (promise, promiseFxnBatch) => {
-      return promise.then(previousResults =>
-        Promise.all(promiseFxnBatch.map(fxn => fxn())).then(newResults =>
-          previousResults.concat(newResults)
+      return promise.then(previousResults => {
+        return Promise.allSettled(promiseFxnBatch.map(fxn => fxn())).then(
+          newResults => {
+            const successfulResults: Video[] = []
+
+            newResults.forEach(response => {
+              // Errors already handled in the promise functions above.
+              if (response.status === 'fulfilled' && response.value !== null) {
+                successfulResults.push(response.value)
+              }
+            })
+
+            return previousResults.concat(successfulResults)
+          }
         )
-      )
+      })
     },
     Promise.resolve([])
   )
 
   if (downloadPromiseFxns.length) {
     const processingTime = sanitizeTime(performance.now() - startProcessing)
-    const errors = [] // TODO - do something with the errors.
-    const errorMsg = errors.length
-      ? ` ${pluralize(errors.length, 'error')}`
-      : ''
-    const icon = errors.length ? '💡' : '✅'
+    const errorCount = failures.reduce((count, failure) => {
+      if (
+        failure.type === 'ytdlpFailure' ||
+        (failure.type === 'schemaParse' &&
+          failure.schemaName === 'YtDlpJsonSchema')
+      ) {
+        count++
+      }
+
+      return count
+    }, 0)
+    const errorMsg = errorCount ? ` ${pluralize(errorCount, 'error')}` : ''
+    const icon = errorCount ? '💡' : '✅'
 
     log(`${icon} ${downloadVerb} complete!${errorMsg} [${processingTime}]`)
   }
@@ -718,17 +917,23 @@ export async function downloadYouTubePlaylist({
 
       await thumbnailPromiseBatches.reduce<Promise<void>>((promise, batch) => {
         return promise
-          .then(() =>
-            Promise.all(
-              batch.map(({url, id}) =>
-                downloadThumbnailFile({url, id, thumbnailDirectory}).then(
-                  () => {
+          .then(() => {
+            return Promise.all(
+              batch.map(({url, id}) => {
+                return downloadThumbnailFile({
+                  url,
+                  id,
+                  thumbnailDirectory,
+                })
+                  .catch((failure: Failure) => {
+                    failures.push(failure)
+                  })
+                  .finally(() => {
                     thumbnailProgressBar.increment()
-                  }
-                )
-              )
+                  })
+              })
             )
-          )
+          })
           .then(() => {})
       }, Promise.resolve())
 
@@ -813,14 +1018,28 @@ export async function downloadYouTubePlaylist({
         )
       })
 
-      await Bun.write(metadataJsonPath, JSON.stringify(sortedMetadata, null, 2))
+      try {
+        await Bun.write(
+          metadataJsonPath,
+          JSON.stringify(sortedMetadata, null, 2)
+        )
 
-      log(
-        `✅ Updated ${pluralize(
-          metadataItemsUpdated,
-          'metadata item'
-        )}! [${sanitizeTime(performance.now() - startUpdateMetadata)}]`
-      )
+        log(
+          `✅ Updated ${pluralize(
+            metadataItemsUpdated,
+            'metadata item'
+          )}! [${sanitizeTime(performance.now() - startUpdateMetadata)}]`
+        )
+      } catch (error) {
+        failures.push({
+          type: 'Bun.write',
+          file: metadataJsonPath,
+          error,
+          date: Date.now(),
+        })
+
+        log(`❌ Unable to write file: ${metadataJsonPath}`)
+      }
     } else {
       log('✅ metadata.json already up to date!')
     }
@@ -828,6 +1047,22 @@ export async function downloadYouTubePlaylist({
 
   log(
     `\n🚀 Process complete! [${sanitizeTime(performance.now() - processStart)}]`
+  )
+
+  return failures.reduce<FailuresObj>(
+    (acc, {type, ...rest}) => {
+      acc[type].push(rest)
+
+      return acc
+    },
+    {
+      'Bun.write': [],
+      schemaParse: [],
+      videosListApi: [],
+      partialVideoNotFound: [],
+      ytdlpFailure: [],
+      downloadThumbnail: [],
+    }
   )
 }
 
@@ -988,6 +1223,10 @@ function parseISO8601DurationToSeconds(durationString: string) {
   return totalSeconds
 }
 
+/**
+ * Fetches a thumbnail url and writes the contents to a file. If the fetch or
+ * file write fails, a `Failure` is thrown.
+ */
 async function downloadThumbnailFile({
   url,
   id,
@@ -996,18 +1235,35 @@ async function downloadThumbnailFile({
   url: string
   id: string
   thumbnailDirectory: string
-}) {
+}): Promise<undefined> {
   const res = await fetch(url, {
     method: 'GET',
     headers: {'Content-Type': 'image/jpeg'},
   })
 
   if (!res.ok) {
-    console.log('NOPE!')
-    throw new Error('Network response for thumbnail was not ok')
+    const failure: Failure = {
+      type: 'downloadThumbnail',
+      status: res.status,
+      statusText: res.statusText,
+      date: Date.now(),
+    }
+
+    throw failure
   }
 
-  return Bun.write(`${thumbnailDirectory}/${id}.jpg`, res)
+  try {
+    await Bun.write(`${thumbnailDirectory}/${id}.jpg`, res)
+  } catch (error) {
+    const failure: Failure = {
+      type: 'Bun.write',
+      file: `${thumbnailDirectory}/${id}.jpg`,
+      error,
+      date: Date.now(),
+    }
+
+    throw failure
+  }
 }
 
 /**
