@@ -825,7 +825,9 @@ export async function downloadYouTubePlaylist({
       )}...`
     )
 
-    videoProgressBar.start(downloadPromiseFxns.length, 0)
+    if (!silent) {
+      videoProgressBar.start(downloadPromiseFxns.length, 0)
+    }
   } else if (downloadType !== 'none') {
     log('\n✅ All videos accounted for, nothing to download!')
   }
@@ -930,7 +932,9 @@ export async function downloadYouTubePlaylist({
       )
 
       log(`\n👉 Downloading ${pluralize(thumbnailsLength, 'thumbnail')}...`)
-      thumbnailProgressBar.start(thumbnailsLength, 0)
+      if (!silent) {
+        thumbnailProgressBar.start(thumbnailsLength, 0)
+      }
 
       const thumbnailPromiseBatches = chunkArray(
         thumbnailsToDownload,
