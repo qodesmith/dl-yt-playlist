@@ -1,5 +1,6 @@
 import {$} from 'bun'
 import fs from 'node:fs'
+import path from 'node:path'
 import google from '@googleapis/youtube'
 import type {youtube_v3} from '@googleapis/youtube'
 import type {GaxiosResponse} from 'googleapis-common'
@@ -1305,9 +1306,17 @@ function sanitizeTitle(str: string): string {
 type CategoryInfo = {
   totalSize: number
   files: {file: string; id: string}[]
+  extensionSet: Set<string>
 }
 
-export function getStats(directory: string) {
+type Stat = {
+  type: string
+  fileCount: number
+  extensions: string
+  totalSize: string
+}
+
+export function getStats(directory: string): Stat[] {
   const {audioData, videoData, thumbnailData} = [
     `${directory}/audio`,
     `${directory}/video`,
@@ -1324,31 +1333,35 @@ export function getStats(directory: string) {
         const id = file.match(squareBracketIdRegex)?.[1]
         const bunFile = Bun.file(`${dir}/${file}`)
         const type = bunFile.type.split('/')[0]
+        const extension = path.parse(file).ext.replace('.', '')
 
         if (id) {
           if (type === 'audio') {
             acc.audioData.files.push({file, id})
             acc.audioData.totalSize += bunFile.size
+            acc.audioData.extensionSet.add(extension)
           }
 
           if (type === 'video') {
             acc.videoData.files.push({file, id})
             acc.videoData.totalSize += bunFile.size
+            acc.videoData.extensionSet.add(extension)
           }
         }
 
         if (type === 'image') {
           acc.thumbnailData.files.push({file, id: file.slice(0, -4)})
           acc.thumbnailData.totalSize += bunFile.size
+          acc.thumbnailData.extensionSet.add(extension)
         }
       }, [])
 
       return acc
     },
     {
-      thumbnailData: {totalSize: 0, files: []},
-      audioData: {totalSize: 0, files: []},
-      videoData: {totalSize: 0, files: []},
+      thumbnailData: {totalSize: 0, files: [], extensionSet: new Set()},
+      audioData: {totalSize: 0, files: [], extensionSet: new Set()},
+      videoData: {totalSize: 0, files: [], extensionSet: new Set()},
     }
   )
 
@@ -1357,24 +1370,31 @@ export function getStats(directory: string) {
       type: 'audio',
       totalSize: audioData.totalSize,
       fileCount: audioData.files.length,
+      extensions: [...audioData.extensionSet].join(', '),
     },
     {
       type: 'video',
       totalSize: videoData.totalSize,
       fileCount: videoData.files.length,
+      extensions: [...videoData.extensionSet].join(', '),
     },
     {
       type: 'thumbnail',
       totalSize: thumbnailData.totalSize,
       fileCount: thumbnailData.files.length,
+      extensions: [...thumbnailData.extensionSet].join(', '),
     },
   ]
     .sort((a, b) => {
       return b.totalSize - a.totalSize
     })
-    .map(({totalSize, ...rest}) => {
-      return {...rest, totalSize: bytesToSize(totalSize)}
-    })
+    .reduce<Stat[]>((acc, {totalSize, ...rest}) => {
+      if (totalSize) {
+        acc.push({...rest, totalSize: bytesToSize(totalSize)})
+      }
+
+      return acc
+    }, [])
 }
 
 function bytesToSize(bytes: number): string {
