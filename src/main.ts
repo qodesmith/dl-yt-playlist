@@ -94,6 +94,14 @@ export type Failure = {date: number} & (
 
 export type FailuresObj = Record<Failure['type'], Omit<Failure, 'type'>[]>
 
+export type DownloadCount = {audio: number; video: number; thumbnail: number}
+
+export type Results = {
+  failureData: FailuresObj
+  downloadCount: DownloadCount
+  youTubeFetchCount: number
+}
+
 /**
  * This schema is used to parse the response from the YouTube
  * [PlaylistItems API](https://developers.google.com/youtube/v3/docs/playlistItems).
@@ -271,7 +279,7 @@ export async function downloadYouTubePlaylist({
    * - youtubeVideoResponses.json
    */
   saveRawResponses?: boolean
-}): Promise<FailuresObj> {
+}): Promise<Results> {
   const log = silent ? () => {} : console.log
   const processStart = performance.now()
   const failures: Failure[] = []
@@ -346,10 +354,12 @@ export async function downloadYouTubePlaylist({
     } items...`
   )
 
+  const youTubeFetchCount = {count: 0}
   const playlistItemsResponses = await genPlaylistItems({
     yt,
     playlistId,
     mostRecentItemsCount,
+    youTubeFetchCount,
   })
 
   if (saveRawResponses) {
@@ -454,6 +464,8 @@ export async function downloadYouTubePlaylist({
 
     return promise.then(previousResults => {
       return Promise.allSettled(promises).then(results => {
+        youTubeFetchCount.count += results.length
+
         const successfulResults: (GaxiosResponse<google.youtube_v3.Schema$VideoListResponse> | null)[] =
           []
 
@@ -615,6 +627,8 @@ export async function downloadYouTubePlaylist({
     cliProgress.Presets.shades_grey
   )
 
+  const downloadCount: DownloadCount = {audio: 0, video: 0, thumbnail: 0}
+
   /**
    * This contains the promise functions for the different download types. File
    * extensions are retrieved from yt-dlp's json and added to the metadata.
@@ -632,6 +646,8 @@ export async function downloadYouTubePlaylist({
       return $`yt-dlp -o "${videoTemplate}" --format="${videoFormat}" --extract-audio --audio-format="${audioFormat}" -k -J --no-simulate ${url}`
         .quiet()
         .then(({exitCode, stdout, stderr}) => {
+          videoProgressBar.increment()
+
           if (exitCode !== 0) {
             failures.push({
               type: 'ytdlpFailure',
@@ -667,7 +683,8 @@ export async function downloadYouTubePlaylist({
           const newAudioPath = `${audioDir}/${title} [${id}].${audioFileExtension}`
 
           fs.renameSync(oldAudioPath, newAudioPath)
-          videoProgressBar.increment()
+          downloadCount.audio++
+          downloadCount.video++
 
           return {...partialVideo, audioFileExtension, videoFileExtension}
         })
@@ -677,6 +694,8 @@ export async function downloadYouTubePlaylist({
       return $`yt-dlp -o "${videoTemplate}" --format="${videoFormat}" -J --no-simulate ${url}`
         .quiet()
         .then(({exitCode, stdout, stderr}) => {
+          videoProgressBar.increment()
+
           if (exitCode !== 0) {
             failures.push({
               type: 'ytdlpFailure',
@@ -706,7 +725,7 @@ export async function downloadYouTubePlaylist({
           }
 
           const {ext: videoFileExtension} = parsedResults.output
-          videoProgressBar.increment()
+          downloadCount.video++
 
           return {...partialVideo, audioFileExtension: null, videoFileExtension}
         })
@@ -716,6 +735,8 @@ export async function downloadYouTubePlaylist({
       return $`yt-dlp -o "${audioTemplate}" --extract-audio --audio-format="${audioFormat}" -J --no-simulate ${url}`
         .quiet()
         .then(({exitCode, stdout, stderr}) => {
+          videoProgressBar.increment()
+
           if (exitCode !== 0) {
             failures.push({
               type: 'ytdlpFailure',
@@ -745,7 +766,7 @@ export async function downloadYouTubePlaylist({
           }
 
           const {requested_downloads} = parsedResults.output
-          videoProgressBar.increment()
+          downloadCount.audio++
 
           return {
             ...partialVideo,
@@ -838,6 +859,7 @@ export async function downloadYouTubePlaylist({
     },
     Promise.resolve([])
   )
+  videoProgressBar.stop()
 
   if (downloadPromiseFxns.length) {
     const processingTime = sanitizeTime(performance.now() - startProcessing)
@@ -926,6 +948,9 @@ export async function downloadYouTubePlaylist({
                   id,
                   thumbnailDirectory,
                 })
+                  .then(() => {
+                    downloadCount.thumbnail++
+                  })
                   .catch((failure: Failure) => {
                     failures.push(failure)
                   })
@@ -937,6 +962,7 @@ export async function downloadYouTubePlaylist({
           })
           .then(() => {})
       }, Promise.resolve())
+      thumbnailProgressBar.stop()
 
       log(
         `✅ Thumbnails downloaded! [${sanitizeTime(
@@ -1050,7 +1076,7 @@ export async function downloadYouTubePlaylist({
     `\n🚀 Process complete! [${sanitizeTime(performance.now() - processStart)}]`
   )
 
-  return failures.reduce<FailuresObj>(
+  const failureData = failures.reduce<FailuresObj>(
     (acc, {type, ...rest}) => {
       acc[type].push(rest)
 
@@ -1065,6 +1091,12 @@ export async function downloadYouTubePlaylist({
       downloadThumbnail: [],
     }
   )
+
+  return {
+    youTubeFetchCount: youTubeFetchCount.count,
+    downloadCount,
+    failureData,
+  }
 }
 
 function mkdirSafe(dir: string) {
@@ -1130,6 +1162,7 @@ function pluralize(amount: number | string, word: string): string {
 async function genPlaylistItems({
   yt,
   playlistId,
+  youTubeFetchCount,
   mostRecentItemsCount,
   pageToken,
   results = [],
@@ -1140,6 +1173,9 @@ async function genPlaylistItems({
 
   /** Playlist id. */
   playlistId: string
+
+  /** A counter to track how many fetch calls are made. */
+  youTubeFetchCount: {count: number}
 
   /** Maximum number of videos to fetch from the API. */
   mostRecentItemsCount?: number
@@ -1177,6 +1213,7 @@ async function genPlaylistItems({
     maxResults,
     pageToken,
   })
+  youTubeFetchCount.count++
 
   const nextPageToken = apiResponse.data.nextPageToken
   const updatedResults = results.concat(apiResponse)
@@ -1190,6 +1227,7 @@ async function genPlaylistItems({
     return genPlaylistItems({
       yt,
       playlistId,
+      youTubeFetchCount,
       mostRecentItemsCount,
       results: updatedResults,
       resultsCount: updatedResultsCount,
