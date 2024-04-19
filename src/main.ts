@@ -1278,7 +1278,7 @@ async function _genPlaylistItems({
     })
   }
 
-  return responses
+  return updatededResponses
 }
 
 function parseISO8601DurationToSeconds(durationString: string) {
