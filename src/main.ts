@@ -437,56 +437,65 @@ export async function downloadYouTubePlaylist({
     )}...`
   )
 
+  /**
+   * Create an array of id arrays that are 50 ids each:
+   *
+   * [[50 ids], [50 ids], ...]
+   */
   const chunkedVideoIdsToFetch = chunkArray(
     videoIdsToFetch,
-    MAX_YOUTUBE_RESULTS * maxConcurrentFetchCalls // i.e. 200 ids
+    MAX_YOUTUBE_RESULTS
+  )
+
+  /**
+   * Each call to the
+   * [VideosList API](https://developers.google.com/youtube/v3/docs/videos/list)
+   * can specify a max of 50 ids. We want to run a number of concurrent fetch
+   * calls, so further chunk the array.
+   */
+  const fetchIdChunks = chunkArray(
+    chunkedVideoIdsToFetch,
+    maxConcurrentFetchCalls
   )
 
   /**
    * Uses the YouTube
    * [VideosList API](https://developers.google.com/youtube/v3/docs/videos/list)
-   * to fetch additional metadata for each video
+   * to fetch additional metadata for each video.
    */
-  const videosListResponses = await chunkedVideoIdsToFetch.reduce<
+  const videosListResponses = await fetchIdChunks.reduce<
     Promise<
       (GaxiosResponse<google.youtube_v3.Schema$VideoListResponse> | null)[]
     >
-  >((promise, ids) => {
-    const idsForPromises = chunkArray(ids, maxConcurrentFetchCalls)
-
-    /**
-     * ⚠️ We call the VideosList API with a max of 50 ids each time. Private and
-     * deleted videos will not show up in `repsonse.data.items` so that array
-     * is not guaranteed to be the same size as our `id` array.
-     */
-    const promises = idsForPromises.map(idsForPromise => {
-      return yt.videos.list({id: idsForPromise, part: ['contentDetails']})
-    })
-
-    return promise.then(previousResults => {
-      return Promise.allSettled(promises).then(results => {
-        youTubeFetchCount.count += results.length
-
-        const successfulResults: (GaxiosResponse<google.youtube_v3.Schema$VideoListResponse> | null)[] =
+  >((promise, idArrays) => {
+    return promise.then(previousResults =>
+      Promise.allSettled(
+        // `idArrays` represents how many concurrent promises we want to run.
+        idArrays.map(ids => {
+          youTubeFetchCount.count++
+          return yt.videos.list({id: ids, part: ['contentDetails']})
+        })
+      ).then(results => {
+        const successfullResults: (GaxiosResponse<google.youtube_v3.Schema$VideoListResponse> | null)[] =
           []
 
         results.forEach((response, resultIndex) => {
           if (response.status === 'fulfilled') {
-            successfulResults.push(response.value)
+            successfullResults.push(response.value)
           } else {
             failures.push({
               type: 'videosListApi',
               error: response.reason,
-              ids: idsForPromises[resultIndex],
+              ids: idArrays[resultIndex],
               date: Date.now(),
             })
-            successfulResults.push(null)
+            successfullResults.push(null)
           }
         })
 
-        return previousResults.concat(successfulResults)
+        return previousResults.concat(successfullResults)
       })
-    })
+    )
   }, Promise.resolve([]))
 
   if (saveRawResponses) {
