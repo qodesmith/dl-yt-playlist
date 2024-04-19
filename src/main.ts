@@ -1,4 +1,4 @@
-import {$} from 'bun'
+import {$, ShellOutput} from 'bun'
 import fs from 'node:fs'
 import path from 'node:path'
 import google from '@googleapis/youtube'
@@ -203,14 +203,14 @@ export async function downloadYouTubePlaylist({
   /**
    * Optional - default value `'mp3'`
    *
-   * A valid ffmpeg audio [format](https://github.com/yt-dlp/yt-dlp?tab=readme-ov-file#format-selection) string.
+   * A valid yt-dlp audio [format](https://github.com/yt-dlp/yt-dlp?tab=readme-ov-file#format-selection) string.
    */
   audioFormat?: string
 
   /**
    * Optional - default value `'mp4'`
    *
-   * A valid ffmpeg video [format](https://github.com/yt-dlp/yt-dlp?tab=readme-ov-file#format-selection) string.
+   * A valid yt-dlp video [format](https://github.com/yt-dlp/yt-dlp?tab=readme-ov-file#format-selection) string.
    */
   videoFormat?: string
 
@@ -1492,4 +1492,152 @@ function bytesToSize(bytes: number): string {
   } else {
     return '0 bytes'
   }
+}
+
+export function getMissingThumbnailIds(directory: string) {
+  const audioDir = `${directory}/audio`
+  const videoDir = `${directory}/video`
+  const thumbnailDir = `${directory}/thumbnails`
+
+  const thumbnailIdsSet = fs
+    .readdirSync(thumbnailDir)
+    .reduce<Set<string>>((acc, item) => {
+      if (item.endsWith('.jpg')) acc.add(item.slice(0, -4))
+      return acc
+    }, new Set())
+  const audioVideoIdsSet = [audioDir, videoDir].reduce<Set<string>>(
+    (acc, dir) => {
+      try {
+        fs.readdirSync(dir).forEach(item => {
+          const id = item.match(squareBracketIdRegex)?.[1]
+          if (id) acc.add(id)
+          return acc
+        })
+      } catch {
+        // noop - directory likely doesn't exist.
+      }
+
+      return acc
+    },
+    new Set()
+  )
+
+  const thumbnailIdsWithoutVideoOrAudio: string[] = []
+  thumbnailIdsSet.forEach(id => {
+    if (!audioVideoIdsSet.has(id)) {
+      thumbnailIdsWithoutVideoOrAudio.push(id)
+    }
+  })
+
+  const missingThumbnailIds: string[] = []
+  audioVideoIdsSet.forEach(id => {
+    if (!thumbnailIdsSet.has(id)) {
+      missingThumbnailIds.push(id)
+    }
+  })
+
+  return {thumbnailIdsWithoutVideoOrAudio, missingThumbnailIds}
+}
+
+export async function downloadVideo({
+  url,
+  downloadType,
+  directory,
+  format,
+  overwrite = false,
+}: {
+  /** YouTube video URL. */
+  url: string
+
+  /** Specify `'audio'` or `'video'`. */
+  downloadType: 'video' | 'audio'
+
+  /** Absolute path where the downloaded video should be saved. */
+  directory: string
+
+  /**
+   * Optional - defaults to `'mp3'` for audio and `'mp4'` for video.
+   *
+   * A valid yt-dlp audio or video format (depending on `downloadType`).
+   */
+  format?: string
+
+  /**
+   * Optional - default `false`
+   *
+   * Overwrites files if they already exist.
+   */
+  overwrite?: boolean
+}) {
+  const start = performance.now()
+  const fileFormat = format ?? (downloadType === 'audio' ? 'mp3' : 'mp4')
+
+  async function handlePromise({exitCode, stderr}: ShellOutput) {
+    if (exitCode !== 0) {
+      console.error(stderr.toString())
+      process.exit(exitCode)
+    }
+
+    const time = performance.now() - start
+    console.log(`✅ Download complete! [${sanitizeTime(time)}]`)
+  }
+
+  console.log(`👉 Downloading ${downloadType}...`)
+
+  /**
+   * First we get JSON metadata from yt-dlp so we can get the video title and
+   * sanitize it. Then we download the video accordingly.
+   */
+  return $`yt-dlp -J ${url}`
+    .quiet()
+    .then(({exitCode, stdout, stderr}) => {
+      if (exitCode !== 0) {
+        console.error(stderr.toString())
+        process.exit(exitCode)
+      }
+
+      const rawTitle = JSON.parse(stdout.toString().trim()).title as string
+      return sanitizeTitle(rawTitle)
+    })
+    .then(title => {
+      const template = `${directory}/${title} [%(id)s].%(ext)s`
+      const extensionsObj = fs
+        .readdirSync(directory)
+        .reduce<{audio: boolean; video: boolean}>(
+          (acc, item) => {
+            const id = item.match(squareBracketIdRegex)?.[1]
+
+            if (id) {
+              const type = Bun.file(`${directory}/${item}`).type.split('/')[0]
+
+              if (type === 'audio') acc.audio = true
+              if (type === 'video') acc.video = true
+            }
+
+            return acc
+          },
+          {audio: false, video: false}
+        )
+
+      if (downloadType === 'audio') {
+        if (extensionsObj.audio && !overwrite) {
+          console.log(
+            '🚫 File already exists. To overwrite, pass `overwrite: true`.'
+          )
+          process.exit()
+        }
+
+        return $`yt-dlp -o "${template}" --extract-audio --audio-format="${fileFormat}" -J --no-simulate ${url}`.quiet()
+      }
+
+      if (extensionsObj.video && !overwrite) {
+        console.log(
+          '🚫 File already exists. To overwrite, pass `overwrite: true`.'
+        )
+        process.exit()
+      }
+
+      return $`yt-dlp -o "${template}" --format="${fileFormat}" -J --no-simulate ${url}`.quiet()
+    })
+    .then(handlePromise)
 }
