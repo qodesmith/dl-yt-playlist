@@ -233,9 +233,9 @@ export async function downloadYouTubePlaylist({
   /**
    * Optional - default value `undefined`
    *
-   * A _positive_ number (max of 50) indicating how many items in the playlist
-   * to retrieve, starting with the most recent. Negative and invalid numbers
-   * will be ignored. All items will be retrieved if no value is provided.
+   * A _positive_ number indicating how many items in the playlist to retrieve,
+   * starting with the most recent. Negative and invalid numbers will be
+   * ignored. All items will be retrieved if no value is provided.
    *
    * I.e. `mostRecentItemsCount: 20` will only retrieve data for the most recent
    * 20 videos in the playlist. This option is useful when running in a cron job
@@ -358,8 +358,9 @@ export async function downloadYouTubePlaylist({
   const playlistItemsResponses = await genPlaylistItems({
     yt,
     playlistId,
-    mostRecentItemsCount,
     youTubeFetchCount,
+    // Default to Infinity, representing all items.
+    totalItemsToFetch: mostRecentItemsCount || Infinity,
   })
 
   if (saveRawResponses) {
@@ -1167,10 +1168,7 @@ async function genPlaylistItems({
   yt,
   playlistId,
   youTubeFetchCount,
-  mostRecentItemsCount,
-  pageToken,
-  results = [],
-  resultsCount = 0,
+  totalItemsToFetch,
 }: {
   /** The YouTube API class used to make the fetch calls. */
   yt: youtube_v3.Youtube
@@ -1182,64 +1180,105 @@ async function genPlaylistItems({
   youTubeFetchCount: {count: number}
 
   /** Maximum number of videos to fetch from the API. */
-  mostRecentItemsCount?: number
-
-  /**
-   * NOT meant to be specified in the initial call.
-   *
-   * Will be provided in recursive calls. A value returned by the API indicating
-   * there are more results to be fetched.
-   */
-  pageToken?: string
-
-  /**
-   * NOT meant to be specified in the initial call.
-   *
-   * Will be provided in resursive calls. An array retaining all API responses.
-   */
-  results?: Awaited<
-    GaxiosResponse<youtube_v3.Schema$PlaylistItemListResponse>
-  >[]
-  resultsCount?: number
+  totalItemsToFetch: number
 }): Promise<
   GaxiosResponse<google.youtube_v3.Schema$PlaylistItemListResponse>[]
 > {
+  return _genPlaylistItems({
+    yt,
+    playlistId,
+    youTubeFetchCount,
+    totalItemsToFetch,
+
+    /**
+     * These values are meant to kick off the process. They will be updated in
+     * recursive calls.
+     */
+    itemsFetchedCount: 0,
+    pageToken: undefined,
+    responses: [],
+  })
+}
+
+/**
+ * Internal counterpart to `genPlaylistItems`. This function calls itself
+ * recursively.
+ */
+async function _genPlaylistItems({
+  yt,
+  playlistId,
+  youTubeFetchCount,
+  totalItemsToFetch,
+  itemsFetchedCount,
+  pageToken,
+  responses,
+}: {
+  /** The YouTube API class used to make the fetch calls. */
+  yt: youtube_v3.Youtube
+
+  /** Playlist id. */
+  playlistId: string
+
+  /** A counter to track how many fetch calls are made. */
+  youTubeFetchCount: {count: number}
+
+  /** Maximum number of videos to fetch from the API. */
+  totalItemsToFetch: number
+
   /**
-   * The maximum value the API can take is 50. By calculating `maxResults` each
-   * time, we avoid over-fetching data.
+   * Each response from the API will have a list of items. These are the
+   * individual video metadata objects. We specifiy how many of these we want
+   * via `totalItemsToFetch`. This number represents how many have been fetched
+   * so far.
    */
-  const maxResults = mostRecentItemsCount
-    ? mostRecentItemsCount - resultsCount
-    : MAX_YOUTUBE_RESULTS
-  const apiResponse = await yt.playlistItems.list({
+  itemsFetchedCount: number
+
+  /**
+   * A value returned by the API indicating there are more results to be
+   * fetched.
+   */
+  pageToken: string | undefined
+
+  /**
+   * Will be provided in resursive calls. An array retaining all API responses.
+   */
+  responses: Awaited<
+    GaxiosResponse<youtube_v3.Schema$PlaylistItemListResponse>
+  >[]
+}): Promise<
+  GaxiosResponse<google.youtube_v3.Schema$PlaylistItemListResponse>[]
+> {
+  const itemsLeftToFetch = totalItemsToFetch - itemsFetchedCount
+  const maxResults =
+    itemsLeftToFetch > 0 && itemsLeftToFetch <= 50 ? itemsLeftToFetch : 50
+
+  const response = await yt.playlistItems.list({
     playlistId,
     part: ['contentDetails', 'snippet'],
     maxResults,
     pageToken,
   })
+
   youTubeFetchCount.count++
 
-  const nextPageToken = apiResponse.data.nextPageToken
-  const updatedResults = results.concat(apiResponse)
-  const updatedResultsCount =
-    resultsCount + (apiResponse.data.items?.length ?? 0)
+  const {nextPageToken, items} = response.data
+  const updatededResponses = responses.concat(response)
+  const newItemsFetchedCount = itemsFetchedCount + (items?.length ?? 0)
+  const shouldContinueFetching = totalItemsToFetch - newItemsFetchedCount > 0
 
-  if (
-    nextPageToken &&
-    (mostRecentItemsCount ? updatedResultsCount < mostRecentItemsCount : true)
-  ) {
-    return genPlaylistItems({
+  if (nextPageToken && shouldContinueFetching) {
+    return _genPlaylistItems({
       yt,
       playlistId,
       youTubeFetchCount,
-      mostRecentItemsCount,
-      results: updatedResults,
-      resultsCount: updatedResultsCount,
+      totalItemsToFetch,
+      itemsFetchedCount: newItemsFetchedCount,
       pageToken: nextPageToken,
+      responses: updatededResponses,
     })
   }
 
-  return updatedResults
+  return responses
 }
 
 function parseISO8601DurationToSeconds(durationString: string) {
