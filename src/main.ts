@@ -1071,13 +1071,15 @@ export async function downloadYouTubePlaylist({
       if (isMetadataJsonMissing) {
         return potentialVideosToDownload.map(partialVideoWithDuration => {
           const {id} = partialVideoWithDuration
+          const existingAudio = existingAudioFilesObj[id]
+          const existingVideo = existingVideoFilesObj[id]
 
           // Get the file extension from existing audio and video files.
-          const audioFileExtension = existingAudioFilesObj[id]
-            ? path.parse(existingAudioFilesObj[id]).ext.slice(1)
+          const audioFileExtension = existingAudio
+            ? path.parse(existingAudio).ext.slice(1)
             : null
-          const videoFileExtension = existingVideoFilesObj[id]
-            ? path.parse(existingVideoFilesObj[id]).ext.slice(1)
+          const videoFileExtension = existingVideo
+            ? path.parse(existingVideo).ext.slice(1)
             : null
 
           return {
