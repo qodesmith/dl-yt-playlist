@@ -597,26 +597,24 @@ export async function downloadYouTubePlaylist({
   const audioDir = `${directory}/audio`
   const videoDir = `${directory}/video`
   // 💡 Directories may now exist - they will be created at a later step.
-  const [existingAudioIdsOnDiskSet, existingVideoIdsOnDiskSet] = [
+  const [existingAudioFilesObj, existingVideoFilesObj] = [
     audioDir,
     videoDir,
   ].map(dir => {
-    return new Set<string>(
-      (() => {
-        try {
-          return fs.readdirSync(dir).reduce<string[]>((acc, item) => {
-            const id = item.match(squareBracketIdRegex)?.[1]
-            if (id) acc.push(id)
+    try {
+      return fs
+        .readdirSync(dir)
+        .reduce<Record<string, string>>((acc, fileName) => {
+          const id = fileName.match(squareBracketIdRegex)?.[1]
+          if (id) acc[id] = fileName
 
-            return acc
-          }, [])
-        } catch {
-          // The directory doesn't exist yet. We'll create it later.
-          return []
-        }
-      })()
-    )
-  }) as [Set<string>, Set<string>]
+          return acc
+        }, {})
+    } catch {
+      // The directory doesn't exist yet. We'll create it later.
+      return {}
+    }
+  }) as [Record<string, string>, Record<string, string>]
   const potentialVideosToDownload = partialVideosWithDurationMetadata.filter(
     ({id, durationInSeconds, isUnavailable}) => {
       return (
@@ -627,8 +625,7 @@ export async function downloadYouTubePlaylist({
         // The video isn't unavailable...
         !isUnavailable &&
         // The video hasn't already been downloaded...
-        (!existingAudioIdsOnDiskSet.has(id) ||
-          !existingVideoIdsOnDiskSet.has(id))
+        (!existingAudioFilesObj[id] || !existingVideoFilesObj[id])
       )
     }
   )
@@ -675,8 +672,8 @@ export async function downloadYouTubePlaylist({
     (() => Promise<Video | null>)[]
   >((acc, partialVideoWithDuration) => {
     const {id, title, url} = partialVideoWithDuration
-    const audioExistsOnDisk = existingAudioIdsOnDiskSet.has(id)
-    const videoExistsOnDisk = existingVideoIdsOnDiskSet.has(id)
+    const audioExistsOnDisk = !!existingAudioFilesObj[id]
+    const videoExistsOnDisk = !!existingVideoFilesObj[id]
     const audioTemplate = makeTemplate(title, 'audio')
     const videoTemplate = makeTemplate(title, 'video')
 
@@ -1033,15 +1030,18 @@ export async function downloadYouTubePlaylist({
    * We have a newly constructed
    */
 
-  if (freshMetadata.length) {
+  const metadataJsonPath = `${directory}/metadata.json`
+  const existingMetadata: Video[] = await Bun.file(metadataJsonPath)
+    .json()
+    .catch(() => []) // In case the file doesn't exist yet.
+  const isMetadataJsonMissing = existingMetadata.length === 0
+  const shouldWriteMetadata = !!freshMetadata.length || isMetadataJsonMissing
+
+  if (shouldWriteMetadata) {
     log('\n👉 Updating metadata.json...')
 
     let metadataItemsUpdated = 0
     const startUpdateMetadata = performance.now()
-    const metadataJsonPath = `${directory}/metadata.json`
-    const existingMetadata: Video[] = await Bun.file(metadataJsonPath)
-      .json()
-      .catch(() => []) // In case the file doesn't exist yet.
 
     // This object will be updated with any new video data we have.
     const existingMetadataObj = existingMetadata.reduce<Record<string, Video>>(
@@ -1053,10 +1053,49 @@ export async function downloadYouTubePlaylist({
     )
 
     /**
+     * If we're missing the `metadata.json` file, `downloadType` is 'audio'
+     * or 'video', AND all the files are on the system already, `freshMetadata`
+     * will have no length because it's based on the `downloadPromiseFxns`
+     * array. Promise functions are skipped from being added to that array if we
+     * detect the file is already on the system, thereby giving us an empty
+     * array.
+     *
+     * Therefore, if we're missing the `metadata.json` file AND there are no
+     * files to download, we need to rely on `potentialVideosToDownload` which
+     * has the metadata we want to write. Usually the promise functions will
+     * return that metadata after downloading a file, but in this case we didn't
+     * download anything and so we need to look elsewhere for the metadata.
+     */
+    const availableVideos: Video[] = (() => {
+      if (freshMetadata.length) return freshMetadata
+      if (isMetadataJsonMissing) {
+        return potentialVideosToDownload.map(partialVideoWithDuration => {
+          const {id} = partialVideoWithDuration
+
+          // Get the file extension from existing audio and video files.
+          const audioFileExtension = existingAudioFilesObj[id]
+            ? path.parse(existingAudioFilesObj[id]).ext.slice(1)
+            : null
+          const videoFileExtension = existingVideoFilesObj[id]
+            ? path.parse(existingVideoFilesObj[id]).ext.slice(1)
+            : null
+
+          return {
+            ...partialVideoWithDuration,
+            audioFileExtension,
+            videoFileExtension,
+          }
+        })
+      }
+
+      return []
+    })()
+
+    /**
      * The Videos List API won't return any data for unavailable videos. We
      * explicitly concat them here so they can be included in the metadata.
      */
-    const totalMetadata = freshMetadata.concat(unavailableVideos)
+    const totalMetadata = availableVideos.concat(unavailableVideos)
 
     totalMetadata.forEach(video => {
       const existingVideo = existingMetadataObj[video.id]
@@ -1071,6 +1110,7 @@ export async function downloadYouTubePlaylist({
           existingVideo.isUnavailable = true
           metadataItemsUpdated++
         } else if (!existingVideo.isUnavailable && !video.isUnavailable) {
+          // Capture the original extensions first for comparison later.
           const existingAudioExt = existingVideo.audioFileExtension
           const existingVideoExt = existingVideo.videoFileExtension
 
