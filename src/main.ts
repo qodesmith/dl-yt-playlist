@@ -428,7 +428,35 @@ export async function downloadYouTubePlaylist({
     acc[partialVideo.id] = partialVideo
     return acc
   }, {})
-  const videoIdsToFetch = partialVideosMetadata.map(({id}) => id)
+
+  /**
+   * Filter out unavailable video ids to potentially reduce how many fetch calls
+   * are made to the YouTube Videos List API.
+   */
+  const videoIdsToFetch = partialVideosMetadata.reduce<string[]>(
+    (acc, {id, isUnavailable}) => {
+      if (!isUnavailable) acc.push(id)
+      return acc
+    },
+    []
+  )
+
+  // Add missing metadata to unavailable videos.
+  const unavailableVideos = partialVideosMetadata.reduce<Video[]>(
+    (acc, partialVideo) => {
+      if (partialVideo.isUnavailable) {
+        acc.push({
+          ...partialVideo,
+          durationInSeconds: 0,
+          audioFileExtension: null,
+          videoFileExtension: null,
+        })
+      }
+
+      return acc
+    },
+    []
+  )
 
   log(
     `👉 Getting remaining video metadata for ${pluralize(
@@ -645,8 +673,8 @@ export async function downloadYouTubePlaylist({
    */
   const downloadPromiseFxns = potentialVideosToDownload.reduce<
     (() => Promise<Video | null>)[]
-  >((acc, partialVideo) => {
-    const {id, title, url} = partialVideo
+  >((acc, partialVideoWithDuration) => {
+    const {id, title, url} = partialVideoWithDuration
     const audioExistsOnDisk = existingAudioIdsOnDiskSet.has(id)
     const videoExistsOnDisk = existingVideoIdsOnDiskSet.has(id)
     const audioTemplate = makeTemplate(title, 'audio')
@@ -696,7 +724,11 @@ export async function downloadYouTubePlaylist({
           downloadCount.audio++
           downloadCount.video++
 
-          return {...partialVideo, audioFileExtension, videoFileExtension}
+          return {
+            ...partialVideoWithDuration,
+            audioFileExtension,
+            videoFileExtension,
+          }
         })
     }
 
@@ -737,7 +769,11 @@ export async function downloadYouTubePlaylist({
           const {ext: videoFileExtension} = parsedResults.output
           downloadCount.video++
 
-          return {...partialVideo, audioFileExtension: null, videoFileExtension}
+          return {
+            ...partialVideoWithDuration,
+            audioFileExtension: null,
+            videoFileExtension,
+          }
         })
     }
 
@@ -779,7 +815,7 @@ export async function downloadYouTubePlaylist({
           downloadCount.audio++
 
           return {
-            ...partialVideo,
+            ...partialVideoWithDuration,
             audioFileExtension: requested_downloads[0]!.ext,
             videoFileExtension: null,
           }
@@ -790,7 +826,7 @@ export async function downloadYouTubePlaylist({
       videoProgressBar.increment()
 
       return Promise.resolve({
-        ...partialVideo,
+        ...partialVideoWithDuration,
         audioFileExtension: null,
         videoFileExtension: null,
       })
@@ -1016,7 +1052,13 @@ export async function downloadYouTubePlaylist({
       {}
     )
 
-    freshMetadata.forEach(video => {
+    /**
+     * The Videos List API won't return any data for unavailable videos. We
+     * explicitly concat them here so they can be included in the metadata.
+     */
+    const totalMetadata = freshMetadata.concat(unavailableVideos)
+
+    totalMetadata.forEach(video => {
       const existingVideo = existingMetadataObj[video.id]
 
       if (existingVideo) {
