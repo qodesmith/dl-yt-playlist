@@ -1,4 +1,4 @@
-import {$, ShellOutput} from 'bun'
+import {$} from 'bun'
 import fs from 'node:fs'
 import path from 'node:path'
 import google from '@googleapis/youtube'
@@ -8,8 +8,10 @@ import cliProgress from 'cli-progress'
 import sanitizeFilename from 'sanitize-filename'
 import {
   safeParse,
+  parse,
   object,
   string,
+  number,
   optional,
   array,
   minLength,
@@ -141,6 +143,14 @@ const VideosListItemSchema = object({
 })
 
 const YtDlpJsonSchema = object({
+  id: string(),
+  title: string(),
+  description: string(),
+  duration: number(),
+  channel_url: string(),
+  channel_id: string(),
+  upload_date: string(), // e.x. 20240221 (i.e. 2/21/2024)
+  channel: string(), // Channel name.
   ext: string(), // Video file extension.
   requested_downloads: array(
     object({
@@ -1634,24 +1644,30 @@ export function getMissingThumbnailIds(directory: string) {
 
 export async function downloadVideo({
   url,
-  downloadType,
   directory,
+  downloadType = 'video',
   format,
   overwrite = false,
 }: {
   /** YouTube video URL. */
   url: string
 
-  /** Specify `'audio'` or `'video'`. */
-  downloadType: 'video' | 'audio'
-
   /** Absolute path where the downloaded video should be saved. */
   directory: string
 
   /**
-   * Optional - defaults to `'mp3'` for audio and `'mp4'` for video.
+   * Optional - defaults to `'video'`
    *
-   * A valid yt-dlp audio or video format (depending on `downloadType`).
+   * Options are `'audio'` or `'video'`.
+   */
+  downloadType?: 'video' | 'audio'
+
+  /**
+   * Optional - defaults to `'mp4'` for video and `'mp3'` for audio.
+   *
+   * A valid yt-dlp video or audio
+   * [format](https://github.com/yt-dlp/yt-dlp?tab=readme-ov-file#format-selection)
+   * corresponding to `downloadType`.
    */
   format?: string
 
@@ -1661,76 +1677,129 @@ export async function downloadVideo({
    * Overwrites files if they already exist.
    */
   overwrite?: boolean
-}) {
-  const start = performance.now()
+}): Promise<{
+  id: string
+  title: string
+  description: string
+  durationInSeconds: number
+  url: string
+  channelId: string
+  channelName: string
+  channelUrl: string
+  dateCreated: string | null
+}> {
   const fileFormat = format ?? (downloadType === 'audio' ? 'mp3' : 'mp4')
-
-  async function handlePromise({exitCode, stderr}: ShellOutput) {
-    if (exitCode !== 0) {
-      console.error(stderr.toString())
-      process.exit(exitCode)
-    }
-
-    const time = performance.now() - start
-    console.log(`✅ Download complete! [${sanitizeTime(time)}]`)
-  }
+  const start = performance.now()
 
   console.log(`👉 Downloading ${downloadType}...`)
 
   /**
-   * First we get JSON metadata from yt-dlp so we can get the video title and
-   * sanitize it. Then we download the video accordingly.
+   * *********
+   * STEP 1: *
+   * *********
+   * Get the metadata for the YouTube video.
    */
-  return $`yt-dlp -J ${url}`
-    .quiet()
-    .then(({exitCode, stdout, stderr}) => {
-      if (exitCode !== 0) {
-        console.error(stderr.toString())
-        process.exit(exitCode)
-      }
 
-      const rawTitle = JSON.parse(stdout.toString().trim()).title as string
-      return sanitizeTitle(rawTitle)
-    })
-    .then(title => {
-      const template = `${directory}/${title} [%(id)s].%(ext)s`
-      const extensionsObj = fs
-        .readdirSync(directory)
-        .reduce<{audio: boolean; video: boolean}>(
-          (acc, item) => {
-            const id = item.match(squareBracketIdRegex)?.[1]
+  const videoInfoResponse = await $`yt-dlp -J ${url}`.quiet()
+  const {title: rawTitle} = parse(
+    YtDlpJsonSchema,
+    JSON.parse(videoInfoResponse.stdout.toString())
+  )
+  const title = sanitizeTitle(rawTitle)
 
-            if (id) {
-              const type = Bun.file(`${directory}/${item}`).type.split('/')[0]
+  /**
+   * *********
+   * STEP 2: *
+   * *********
+   * Determine if the video already exists on the file system.
+   */
 
-              if (type === 'audio') acc.audio = true
-              if (type === 'video') acc.video = true
-            }
+  // Determine if we have already downloaded the video before.
+  const {audioExists, videoExists} = fs
+    .readdirSync(directory)
+    .reduce<{audioExists: boolean; videoExists: boolean}>(
+      (acc, item) => {
+        const id = item.match(squareBracketIdRegex)?.[1]
 
-            return acc
-          },
-          {audio: false, video: false}
-        )
+        if (id) {
+          const type = Bun.file(`${directory}/${item}`).type.split('/')[0]
 
-      if (downloadType === 'audio') {
-        if (extensionsObj.audio && !overwrite) {
-          console.log(
-            '🚫 File already exists. To overwrite, pass `overwrite: true`.'
-          )
-          process.exit()
+          if (type === 'audio') acc.audioExists = true
+          if (type === 'video') acc.videoExists = true
         }
 
-        return $`yt-dlp -o "${template}" --extract-audio --audio-format="${fileFormat}" -J --no-simulate ${url}`.quiet()
-      }
+        return acc
+      },
+      {audioExists: false, videoExists: false}
+    )
 
-      if (extensionsObj.video && !overwrite) {
+  /**
+   * *********
+   * STEP 3: *
+   * *********
+   * Download the video.
+   */
+
+  const downloadFileResponse = await (() => {
+    const template = `${directory}/${title} [%(id)s].%(ext)s`
+
+    if (downloadType === 'audio') {
+      if (audioExists && !overwrite) {
         console.log(
           '🚫 File already exists. To overwrite, pass `overwrite: true`.'
         )
         process.exit()
       }
 
-      return $`yt-dlp -o "${template}" --format="${fileFormat}" -J --no-simulate ${url}`.quiet()
-    })
-    .then(handlePromise)
+      return $`yt-dlp -o "${template}" --extract-audio --audio-format="${fileFormat}" -J --no-simulate ${url}`.quiet()
+    }
+
+    if (videoExists && !overwrite) {
+      console.log(
+        '🚫 File already exists. To overwrite, pass `overwrite: true`.'
+      )
+      process.exit()
+    }
+
+    return $`yt-dlp -o "${template}" --format="${fileFormat}" -J --no-simulate ${url}`.quiet()
+  })()
+
+  if (downloadFileResponse.exitCode !== 0) {
+    console.error(downloadFileResponse.stderr.toString())
+    process.exit(downloadFileResponse.exitCode)
+  }
+
+  const {
+    id,
+    description,
+    duration: durationInSeconds,
+    channel_id: channelId,
+    channel: channelName,
+    channel_url: channelUrl,
+    upload_date, // e.x. '20240221' (i.e. 2/21/2024)
+  } = parse(YtDlpJsonSchema, JSON.parse(downloadFileResponse.stdout.toString()))
+
+  const time = performance.now() - start
+  console.log(`✅ Download complete! [${sanitizeTime(time)}]`)
+
+  const dateCreated: string | null = (() => {
+    const year = Number(upload_date.slice(0, 4))
+    const month = Number(upload_date.slice(4, 6)) - 1 // Months are 0-index
+    const day = Number(upload_date.slice(-2))
+    const date = new Date(year, month, day)
+
+    return date.toString() === 'Invalid Date' ? null : date.toISOString()
+  })()
+
+  return {
+    id,
+    title,
+    description,
+    durationInSeconds,
+    url,
+    channelId,
+    channelName,
+    channelUrl,
+    dateCreated,
+  }
 }
