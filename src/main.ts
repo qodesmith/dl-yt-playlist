@@ -94,7 +94,11 @@ export type Failure = {date: number} & (
     }
 )
 
-export type FailuresObj = Record<Failure['type'], Omit<Failure, 'type'>[]>
+export type FailureType = Failure['type']
+
+export type FailuresObj = {
+  [K in Failure['type']]: Omit<Extract<Failure, {type: K}>, 'type'>[]
+}
 
 export type DownloadCount = {audio: number; video: number; thumbnail: number}
 
@@ -1186,8 +1190,8 @@ export async function downloadYouTubePlaylist({
 
   const failureData = failures.reduce<FailuresObj>(
     (acc, {type, ...rest}) => {
+      // @ts-expect-error `rest` is the appropriate type.
       acc[type].push(rest)
-
       return acc
     },
     {
