@@ -62,7 +62,7 @@ export type Failure = {date: number} & (
   | {
       type: 'Bun.write'
       file: string
-      error: unknown
+      error: Record<string, unknown>
     }
   | {
       type: 'schemaParse'
@@ -74,7 +74,7 @@ export type Failure = {date: number} & (
     }
   | {
       type: 'videosListApi'
-      error: unknown
+      error: Record<string, unknown>
       ids: string[] | undefined
     }
   | {
@@ -387,7 +387,7 @@ export async function downloadYouTubePlaylist({
       failures.push({
         type: 'Bun.write',
         file: 'youtubePlaylistResponses.json',
-        error,
+        error: errorToObject(error),
         date: Date.now(),
       })
     }
@@ -550,7 +550,7 @@ export async function downloadYouTubePlaylist({
       failures.push({
         type: 'Bun.write',
         file: 'youtubeVideoResponses.json',
-        error,
+        error: errorToObject(error),
         date: Date.now(),
       })
     }
@@ -1173,7 +1173,7 @@ export async function downloadYouTubePlaylist({
         failures.push({
           type: 'Bun.write',
           file: metadataJsonPath,
-          error,
+          error: errorToObject(error),
           date: Date.now(),
         })
 
@@ -1447,7 +1447,7 @@ async function downloadThumbnailFile({
     const failure: Failure = {
       type: 'Bun.write',
       file: `${thumbnailDirectory}/${id}.jpg`,
-      error,
+      error: errorToObject(error),
       date: Date.now(),
     }
 
@@ -1806,4 +1806,14 @@ export async function downloadVideo({
     channelUrl,
     dateCreated,
   }
+}
+
+function errorToObject(error: any): Record<string, unknown> {
+  return Object.getOwnPropertyNames(error).reduce<Record<string, any>>(
+    (acc, key) => {
+      acc[key] = error[key]
+      return acc
+    },
+    {}
+  )
 }
