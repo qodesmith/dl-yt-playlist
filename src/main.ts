@@ -89,6 +89,7 @@ export type Failure = {date: number} & (
     }
   | {
       type: 'downloadThumbnail'
+      url: string
       status: number
       statusText: string
     }
@@ -1433,6 +1434,7 @@ async function downloadThumbnailFile({
   if (!res.ok) {
     const failure: Failure = {
       type: 'downloadThumbnail',
+      url,
       status: res.status,
       statusText: res.statusText,
       date: Date.now(),
