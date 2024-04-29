@@ -346,7 +346,7 @@ export async function downloadYouTubePlaylist({
     process.exit(1)
   }
 
-  log('✅ System dependencies are present!')
+  log('✅ `yt-dlp` and `ffmpeg` are present!')
 
   /**
    * *********
@@ -923,21 +923,18 @@ export async function downloadYouTubePlaylist({
 
   if (downloadPromiseFxns.length) {
     const processingTime = sanitizeTime(performance.now() - startProcessing)
-    const errorCount = failures.reduce((count, failure) => {
-      if (
-        failure.type === 'ytdlpFailure' ||
-        (failure.type === 'schemaParse' &&
-          failure.schemaName === 'YtDlpJsonSchema')
-      ) {
-        count++
+    const {icon, errorMessage} = getErrorCountIconAndMessage(
+      failures,
+      failure => {
+        return (
+          failure.type === 'ytdlpFailure' ||
+          (failure.type === 'schemaParse' &&
+            failure.schemaName === 'YtDlpJsonSchema')
+        )
       }
+    )
 
-      return count
-    }, 0)
-    const errorMsg = errorCount ? ` ${pluralize(errorCount, 'error')}` : ''
-    const icon = errorCount ? '💡' : '✅'
-
-    log(`${icon} ${downloadVerb} complete!${errorMsg} [${processingTime}]`)
+    log(`${icon} ${downloadVerb} complete!${errorMessage} [${processingTime}]`)
   }
 
   /**
@@ -1026,8 +1023,13 @@ export async function downloadYouTubePlaylist({
       }, Promise.resolve())
       thumbnailProgressBar.stop()
 
+      const {icon, errorMessage} = getErrorCountIconAndMessage(
+        failures,
+        ({type}) => type === 'downloadThumbnail'
+      )
+
       log(
-        `✅ Thumbnails downloaded! [${sanitizeTime(
+        `${icon} Thumbnails downloaded!${errorMessage} [${sanitizeTime(
           performance.now() - startThumbnails
         )}]`
       )
@@ -1818,4 +1820,18 @@ function errorToObject(error: any): Record<string, unknown> {
     },
     {}
   )
+}
+
+function getErrorCountIconAndMessage(
+  failures: Failure[],
+  conditionFxn: (failure: Failure) => boolean
+): {icon: '💡' | '✅'; errorMessage: string} {
+  const errorCount = failures.reduce<number>((count, failure) => {
+    if (conditionFxn(failure)) count++
+    return count
+  }, 0)
+  const errorMessage = errorCount ? ` ${pluralize(errorCount, 'error')}` : ''
+  const icon = errorCount ? '💡' : '✅'
+
+  return {icon, errorMessage}
 }
