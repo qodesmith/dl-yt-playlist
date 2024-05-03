@@ -409,7 +409,7 @@ export async function downloadYouTubePlaylist({
             snippet.thumbnails.high?.url,
             snippet.thumbnails.medium?.url,
             snippet.thumbnails.default?.url,
-          ].filter(v => typeof v === 'string'),
+          ].filter(Boolean) as string[],
           url: `https://www.youtube.com/watch?v=${snippet.resourceId.videoId}`,
           channelUrl: `https://www.youtube.com/channel/${snippet.videoOwnerChannelId}`,
           isUnavailable,
