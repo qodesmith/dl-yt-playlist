@@ -1833,14 +1833,14 @@ async function genMetadataStats(directory: string) {
   const audioFilesWithoutMetadata = Object.entries(
     existingAudioFilesObj
   ).reduce<string[]>((acc, [id, fileName]) => {
-    if (metadataJsonObj[id]) acc.push(fileName)
+    if (!metadataJsonObj[id]) acc.push(fileName)
     return acc
   }, [])
 
   const videoFilesWithoutMetadata = Object.entries(
     existingVideoFilesObj
   ).reduce<string[]>((acc, [id, fileName]) => {
-    if (metadataJsonObj[id]) acc.push(fileName)
+    if (!metadataJsonObj[id]) acc.push(fileName)
     return acc
   }, [])
 
