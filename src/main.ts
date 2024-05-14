@@ -1830,12 +1830,19 @@ async function genMetadataStats(directory: string) {
     }
   )
 
-  const audioFilesWithoutMetadata = Object.keys(existingAudioFilesObj).filter(
-    id => !metadataJsonObj[id]
-  )
-  const videoFilesWithoutMetadata = Object.keys(existingVideoFilesObj).filter(
-    id => !metadataJsonObj[id]
-  )
+  const audioFilesWithoutMetadata = Object.entries(
+    existingAudioFilesObj
+  ).reduce<string[]>((acc, [id, fileName]) => {
+    if (metadataJsonObj[id]) acc.push(fileName)
+    return acc
+  }, [])
+
+  const videoFilesWithoutMetadata = Object.entries(
+    existingVideoFilesObj
+  ).reduce<string[]>((acc, [id, fileName]) => {
+    if (metadataJsonObj[id]) acc.push(fileName)
+    return acc
+  }, [])
 
   return {
     itemsTotal,
