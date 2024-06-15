@@ -12,6 +12,7 @@ import {
   VideosListItemSchema,
   YtDlpJsonSchema,
 } from './schemas'
+import {log, emptyLog} from '@qodestack/utils'
 
 export type Video = {
   /** listApi.snippet.resourceId.videoId */
@@ -239,7 +240,7 @@ export async function downloadYouTubePlaylist({
    */
   saveRawResponses?: boolean
 }): Promise<Results> {
-  const log = silent ? () => {} : console.log
+  const logger = silent ? emptyLog : log
   const processStart = performance.now()
 
   /**
@@ -262,7 +263,7 @@ export async function downloadYouTubePlaylist({
    * without returning anything if dependencies are missing.
    */
 
-  log('\n👉 Checking system dependencies...')
+  logger.text('Checking system dependencies...')
 
   const ytDlpPath = Bun.which('yt-dlp')
   const ffmpegPath = Bun.which('ffmpeg')
@@ -302,7 +303,7 @@ export async function downloadYouTubePlaylist({
     process.exit(1)
   }
 
-  log('✅ `yt-dlp` and `ffmpeg` are present!')
+  logger.text('`yt-dlp` and `ffmpeg` are present!')
 
   /**
    * *********
@@ -320,8 +321,8 @@ export async function downloadYouTubePlaylist({
   /** The YouTube API client. */
   const yt = google.youtube({version: 'v3', auth: youTubeApiKey})
   const startFetchMetadata = performance.now()
-  log(
-    `\n👉 Getting partial video metadata for ${
+  logger.text(
+    `Getting partial video metadata for ${
       mostRecentItemsCount || 'all'
     } items...`
   )
@@ -479,8 +480,8 @@ export async function downloadYouTubePlaylist({
    */
   const videoIdsToFetch = partialVideoReductionData.videoIdsToFetch
 
-  log(
-    `👉 Getting remaining video metadata for ${pluralize(
+  logger.text(
+    `Getting remaining video metadata for ${pluralize(
       videoIdsToFetch.length,
       'item'
     )}...`
@@ -615,7 +616,7 @@ export async function downloadYouTubePlaylist({
     })
 
   const fetchMetadataTime = sanitizeTime(performance.now() - startFetchMetadata)
-  log(`✅ Video metadata received! [${fetchMetadataTime}]`)
+  logger.text(`Video metadata received! [${fetchMetadataTime}]`)
 
   /**
    * *********
@@ -895,8 +896,8 @@ export async function downloadYouTubePlaylist({
   const downloadVerb = downloadType === 'none' ? 'Processing' : 'Downloading'
 
   if (downloadPromiseFxns.length) {
-    log(
-      `\n👉 ${downloadVerb} ${pluralize(
+    logger.text(
+      `${downloadVerb} ${pluralize(
         downloadPromiseFxns.length,
         'playlist item'
       )}...`
@@ -906,7 +907,7 @@ export async function downloadYouTubePlaylist({
       videoProgressBar.start(downloadPromiseFxns.length, 0)
     }
   } else if (downloadType !== 'none') {
-    log('\n✅ All videos accounted for, nothing to download!')
+    logger.text('All videos accounted for, nothing to download!')
   }
 
   const promiseFxnBatches = chunkArray(
@@ -956,7 +957,9 @@ export async function downloadYouTubePlaylist({
       }
     )
 
-    log(`${icon} ${downloadVerb} complete!${errorMessage} [${processingTime}]`)
+    logger[errorMessage ? 'warning' : 'text'](
+      `${icon} ${downloadVerb} complete!${errorMessage} [${processingTime}]`
+    )
   }
 
   /**
@@ -1015,7 +1018,7 @@ export async function downloadYouTubePlaylist({
         cliProgress.Presets.shades_grey
       )
 
-      log(`\n👉 Downloading ${pluralize(thumbnailsLength, 'thumbnail')}...`)
+      logger.text(`Downloading ${pluralize(thumbnailsLength, 'thumbnail')}...`)
       if (!silent) {
         thumbnailProgressBar.start(thumbnailsLength, 0)
       }
@@ -1058,13 +1061,13 @@ export async function downloadYouTubePlaylist({
           type === 'thumbnailDownload' || type === 'thumbnailUrlNotAvailable'
       )
 
-      log(
+      logger[errorMessage ? 'warning' : 'text'](
         `${icon} Thumbnails downloaded!${errorMessage} [${sanitizeTime(
           performance.now() - startThumbnails
         )}]`
       )
     } else {
-      log('\n✅ All thumbnails accounted for, nothing to download!')
+      logger.text('All thumbnails accounted for, nothing to download!')
     }
   }
 
@@ -1083,7 +1086,7 @@ export async function downloadYouTubePlaylist({
   const shouldWriteMetadata = !!freshMetadata.length || isMetadataJsonMissing
 
   if (shouldWriteMetadata) {
-    log('\n👉 Updating metadata.json...')
+    logger.text('Updating metadata.json...')
 
     let metadataItemsUpdated = 0
     const startUpdateMetadata = performance.now()
@@ -1219,8 +1222,8 @@ export async function downloadYouTubePlaylist({
           JSON.stringify(sortedMetadata, null, 2)
         )
 
-        log(
-          `✅ Updated ${pluralize(
+        logger.text(
+          `Updated ${pluralize(
             metadataItemsUpdated,
             'metadata item'
           )}! [${sanitizeTime(performance.now() - startUpdateMetadata)}]`
@@ -1233,15 +1236,15 @@ export async function downloadYouTubePlaylist({
           date: Date.now(),
         })
 
-        log(`❌ Unable to write file: ${metadataJsonPath}`)
+        logger.error(`Unable to write file: ${metadataJsonPath}`)
       }
     } else {
-      log('✅ metadata.json already up to date!')
+      logger.text('metadata.json already up to date!')
     }
   }
 
-  log(
-    `\n🚀 Process complete! [${sanitizeTime(performance.now() - processStart)}]`
+  logger.success(
+    `Process complete! [${sanitizeTime(performance.now() - processStart)}]`
   )
 
   const failureData = failures.reduce<FailuresObj>(
