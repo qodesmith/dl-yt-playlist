@@ -213,7 +213,7 @@ export async function downloadYouTubePlaylist({
   /**
    * Optional - default value `false`
    *
-   * Boolean indicating wether to silence all internal console.log's.
+   * Boolean indicating wether to silence all internal logging to the console.
    */
   silent?: boolean
 
@@ -294,9 +294,7 @@ export async function downloadYouTubePlaylist({
 
   if (ffmpegPath === null) {
     logger.error('\nCould not find the `ffmpeg` package on this system.')
-    logger.error(
-      'This package is needed to extract audio from YouTube videos.'
-    )
+    logger.error('This package is needed to extract audio from YouTube videos.')
     logger.error(
       'You can download a binary at https://www.ffmpeg.org/download.html or run `brew install ffmpeg`.'
     )
@@ -1891,6 +1889,7 @@ export async function downloadVideo({
   downloadType = 'video',
   format,
   overwrite = false,
+  timeZone,
 }: {
   /** YouTube video URL. */
   url: string
@@ -1920,6 +1919,13 @@ export async function downloadVideo({
    * Overwrites files if they already exist.
    */
   overwrite?: boolean
+
+  /**
+   * Optional - deafaults to the system time zone.
+   *
+   * String indicating what timezone to use for the logger.
+   */
+  timeZone?: string
 }): Promise<{
   id: string
   title: string
@@ -1933,8 +1939,9 @@ export async function downloadVideo({
 }> {
   const fileFormat = format ?? (downloadType === 'audio' ? 'mp3' : 'mp4')
   const start = performance.now()
+  const log = createLogger({timeZone})
 
-  console.log(`👉 Downloading ${downloadType}...`)
+  log.text(`Downloading ${downloadType}...`)
 
   /**
    * *********
@@ -1988,7 +1995,7 @@ export async function downloadVideo({
 
     if (downloadType === 'audio') {
       if (audioExists && !overwrite) {
-        console.log(
+        log.warning(
           '🚫 File already exists. To overwrite, pass `overwrite: true`.'
         )
         process.exit()
@@ -1998,7 +2005,7 @@ export async function downloadVideo({
     }
 
     if (videoExists && !overwrite) {
-      console.log(
+      log.warning(
         '🚫 File already exists. To overwrite, pass `overwrite: true`.'
       )
       process.exit()
@@ -2008,7 +2015,7 @@ export async function downloadVideo({
   })()
 
   if (downloadFileResponse.exitCode !== 0) {
-    console.error(downloadFileResponse.stderr.toString())
+    log.error(downloadFileResponse.stderr.toString())
     process.exit(downloadFileResponse.exitCode)
   }
 
@@ -2023,7 +2030,7 @@ export async function downloadVideo({
   } = parse(YtDlpJsonSchema, JSON.parse(downloadFileResponse.stdout.toString()))
 
   const time = performance.now() - start
-  console.log(`✅ Download complete! [${sanitizeTime(time)}]`)
+  log.success(`Download complete! [${sanitizeTime(time)}]`)
 
   const dateCreated: string | null = (() => {
     const year = Number(upload_date.slice(0, 4))
