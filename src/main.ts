@@ -12,7 +12,12 @@ import {
   VideosListItemSchema,
   YtDlpJsonSchema,
 } from './schemas'
-import {log, emptyLog} from '@qodestack/utils'
+import {
+  createLogger,
+  emptyLog,
+  errorToObject,
+  chunkArray,
+} from '@qodestack/utils'
 
 export type Video = {
   /** listApi.snippet.resourceId.videoId */
@@ -121,6 +126,7 @@ export async function downloadYouTubePlaylist({
   maxDurationSeconds = Infinity,
   mostRecentItemsCount,
   silent = false,
+  timeZone,
   maxConcurrentFetchCalls = 4,
   maxConcurrentYtdlpCalls = 10,
   saveRawResponses = false,
@@ -212,6 +218,13 @@ export async function downloadYouTubePlaylist({
   silent?: boolean
 
   /**
+   * Optional - deafaults to the system time zone.
+   *
+   * String indicating what timezone to use for the logger.
+   */
+  timeZone?: string
+
+  /**
    * Optional - default value `4`
    *
    * The number of concurrent fetch calls made to the YouTube
@@ -240,6 +253,7 @@ export async function downloadYouTubePlaylist({
    */
   saveRawResponses?: boolean
 }): Promise<Results> {
+  const log = createLogger({timeZone})
   const logger = silent ? emptyLog : log
   const processStart = performance.now()
 
@@ -271,25 +285,25 @@ export async function downloadYouTubePlaylist({
   const directoryExists = fs.existsSync(directory)
 
   if (ytDlpPath === null) {
-    console.error('\nCould not find the `yt-dlp` package on this system.')
-    console.error('This package is needed to download YouTube videos.')
-    console.error(
+    logger.error('\nCould not find the `yt-dlp` package on this system.')
+    logger.error('This package is needed to download YouTube videos.')
+    logger.error(
       'Please head to https://github.com/yt-dlp/yt-dlp for download instructions.'
     )
   }
 
   if (ffmpegPath === null) {
-    console.error('\nCould not find the `ffmpeg` package on this system.')
-    console.error(
+    logger.error('\nCould not find the `ffmpeg` package on this system.')
+    logger.error(
       'This package is needed to extract audio from YouTube videos.'
     )
-    console.error(
+    logger.error(
       'You can download a binary at https://www.ffmpeg.org/download.html or run `brew install ffmpeg`.'
     )
   }
 
   if (!directoryExists) {
-    console.error(
+    logger.error(
       `\n${directory} does not exist. Please check the path or create it.`
     )
   }
@@ -1611,12 +1625,6 @@ export const squareBracketIdRegex = /\[([a-zA-Z0-9_-]+)\]\.\w+$/
 
 const MAX_YOUTUBE_RESULTS = 50
 
-function chunkArray<T>(arr: T[], size: number): T[][] {
-  return Array.from({length: Math.ceil(arr.length / size)}, (v, i) =>
-    arr.slice(i * size, i * size + size)
-  )
-}
-
 function sanitizeTitle(str: string): string {
   const safeTitle = sanitizeFilename(str, {replacement: ' '})
 
@@ -1653,16 +1661,6 @@ function bytesToSize(bytes: number): string {
   }
 }
 
-function errorToObject(error: any): Record<string, unknown> {
-  return Object.getOwnPropertyNames(error).reduce<Record<string, any>>(
-    (acc, key) => {
-      acc[key] = error[key]
-      return acc
-    },
-    {}
-  )
-}
-
 function getErrorCountIconAndMessage(
   failures: Failure[],
   conditionFxn: (failure: Failure) => boolean
@@ -1676,15 +1674,6 @@ function getErrorCountIconAndMessage(
   const icon = errorCount ? '💡' : '✅'
 
   return {icon, errorMessage}
-}
-
-async function genVideosObjFromJson(directory: string) {
-  const videoData: Video[] = await Bun.file(`${directory}/metadata.json`).json()
-
-  return videoData.reduce<Record<string, Video>>((acc, video) => {
-    acc[video.id] = video
-    return acc
-  }, {})
 }
 
 function getFileStats(directory: string): FileStat[] {

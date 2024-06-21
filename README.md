@@ -103,6 +103,13 @@ downloadYoutubePlaylist({
   silent?: boolean
 
   /**
+   * Optional - deafaults to the system time zone.
+   *
+   * String indicating what timezone to use for the logger.
+   */
+  timeZone?: string
+
+  /**
    * Options - default value `4`
    *
    * The number of concurrent fetch calls made to the YouTube
