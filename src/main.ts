@@ -2053,3 +2053,38 @@ export async function downloadVideo({
     dateCreated,
   }
 }
+
+export async function genDuplicatePlaylistEntries({
+  playlistId,
+  youTubeApiKey,
+}: {
+  playlistId: string
+  youTubeApiKey: string
+}) {
+  const yt = google.youtube({version: 'v3', auth: youTubeApiKey})
+  const youTubeFetchCount = {count: 0}
+  const playlistItemsResponses = await genPlaylistItems({
+    yt,
+    playlistId,
+    youTubeFetchCount,
+    totalItemsToFetch: Infinity,
+  })
+  const idSet = new Set<string>()
+  const duplicates: {playlistId: string; videoId: string}[] = []
+
+  playlistItemsResponses.forEach(({data}) => {
+    data.items?.forEach(({contentDetails, id: playlistId}) => {
+      const {videoId} = contentDetails ?? {}
+
+      if (videoId && playlistId) {
+        if (idSet.has(videoId)) {
+          duplicates.push({playlistId, videoId})
+        } else {
+          idSet.add(videoId)
+        }
+      }
+    })
+  })
+
+  return duplicates
+}
