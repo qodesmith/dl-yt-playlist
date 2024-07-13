@@ -404,7 +404,7 @@ export async function downloadYouTubePlaylist({
 
         acc.push({
           id: snippet.resourceId.videoId,
-          title: sanitizeTitle(snippet.title),
+          title: snippet.title,
           description: snippet.description,
           channelId: snippet.videoOwnerChannelId,
           channelName: snippet.videoOwnerChannelTitle,
@@ -690,9 +690,6 @@ export async function downloadYouTubePlaylist({
   }
 
   const startProcessing = performance.now()
-  const makeTemplate = (title: string, type: 'audio' | 'video') => {
-    return `${directory}/${type}/${title} [%(id)s].%(ext)s`
-  }
   const videoProgressBar = new cliProgress.SingleBar(
     {
       format: '👉 {bar} {percentage}% | {value}/{total} | {duration_formatted}',
@@ -711,11 +708,11 @@ export async function downloadYouTubePlaylist({
   const downloadPromiseFxns = potentialVideosToDownload.reduce<
     (() => Promise<Video | null>)[]
   >((acc, partialVideoWithDuration) => {
-    const {id, title, url} = partialVideoWithDuration
+    const {id, url} = partialVideoWithDuration
     const audioExistsOnDisk = !!existingAudioFilesObj[id]
     const videoExistsOnDisk = !!existingVideoFilesObj[id]
-    const audioTemplate = makeTemplate(title, 'audio')
-    const videoTemplate = makeTemplate(title, 'video')
+    const audioTemplate = `${directory}/audio/%(id)s.%(ext)s`
+    const videoTemplate = `${directory}/video/%(id)s.%(ext)s`
 
     const bothPromiseFxn = () => {
       return $`yt-dlp -o "${videoTemplate}" --format="${videoFormat}" --extract-audio --audio-format="${audioFormat}" -k -J --no-simulate ${url}`
@@ -761,8 +758,8 @@ export async function downloadYouTubePlaylist({
           const {ext: videoFileExtension, requested_downloads} =
             parsedResults.output
           const audioFileExtension = requested_downloads[0]!.ext
-          const oldAudioPath = `${videoDir}/${title} [${id}].${audioFileExtension}`
-          const newAudioPath = `${audioDir}/${title} [${id}].${audioFileExtension}`
+          const oldAudioPath = `${videoDir}/${id}.${audioFileExtension}`
+          const newAudioPath = `${audioDir}/${id}.${audioFileExtension}`
 
           fs.renameSync(oldAudioPath, newAudioPath)
 
@@ -1623,13 +1620,6 @@ export const squareBracketIdRegex = /\[([a-zA-Z0-9_-]+)\]\.\w+$/
 
 const MAX_YOUTUBE_RESULTS = 50
 
-function sanitizeTitle(str: string): string {
-  const safeTitle = sanitizeFilename(str, {replacement: ' '})
-
-  // Use a regular expression to replace consecutive spaces with a single space.
-  return safeTitle.replace(/\s+/g, ' ')
-}
-
 export type FileStatCategoryInfo = {
   totalSize: number
   files: {file: string; id: string}[]
@@ -1955,7 +1945,7 @@ export async function downloadVideo({
     YtDlpJsonSchema,
     JSON.parse(videoInfoResponse.stdout.toString())
   )
-  const title = sanitizeTitle(rawTitle)
+  const title = sanitizeFilename(rawTitle, {replacement: ' '})
 
   /**
    * *********
