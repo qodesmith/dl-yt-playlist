@@ -113,6 +113,7 @@ export type Results = {
   failureData: FailuresObj
   downloadCount: DownloadCount
   youTubeFetchCount: number
+  videosDownloaded: Video[]
 }
 
 export async function downloadYouTubePlaylist({
@@ -1277,6 +1278,7 @@ export async function downloadYouTubePlaylist({
     youTubeFetchCount: youTubeFetchCount.count,
     downloadCount,
     failureData,
+    videosDownloaded: freshMetadata,
   }
 }
 
