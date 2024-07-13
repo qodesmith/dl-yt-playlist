@@ -17,6 +17,9 @@ import {
   emptyLog,
   errorToObject,
   chunkArray,
+  pluralize,
+  sanitizeDecimal,
+  bytesToSize,
 } from '@qodestack/utils'
 
 export type Video = {
@@ -1308,49 +1311,6 @@ function sanitizeTime(ms: number): string {
 }
 
 /**
- * Massages a float into consistent decimal format as a string. Examples:
- * - 2.1091 => 2.11
- * - 2.0    => 2
- * - 2.10   => 2.1
- * - 2.0    => 2
- */
-function sanitizeDecimal(num: number): string {
-  return (
-    num
-      .toFixed(2)
-      /**
-       * `(\.\d*?)` - captures the decimal point `\.` followed by zero or more
-       *              digits `\d*`, but it does so non-greedily due to the `?`
-       *              after the `*`. This means it captures the smallest possible
-       *              sequence of digits after the decimal point. This part is
-       *              enclosed in parentheses to create a capturing group. The
-       *              captured content will be referred to as `$1` in the
-       *              replacement string.
-       * `0*$`      - This part matches zero or more zeros `0*` that appear at the
-       *              end of the string `$`.
-       * `'$1'`     - Refers to the content captured by the first capturing group.
-       */
-      .replace(/(\.\d*?)0*$/, '$1')
-      /**
-       * `\.$`      - Remove any trailing period that might be present after the
-       *              zeros are removed. It matches a period at the end of the
-       *              string and replaces it with an empty string.
-       */
-      .replace(/\.$/, '')
-  )
-}
-
-/**
- * pluralize(3, 'apple') => '3 apples'
- * pluralize(0, 'apple') => '0 apples'
- * pluralize(1, 'apple') =? '1 apple'
- */
-function pluralize(amount: number | string, word: string): string {
-  const s = +amount === 1 ? '' : 's'
-  return `${amount} ${word}${s}`
-}
-
-/**
  * Uses the YouTube
  * [PlaylistItems API](https://developers.google.com/youtube/v3/docs/playlistItems)
  * to fetch metadata on videos.
@@ -1633,22 +1593,6 @@ export type FileStat = {
   fileCount: number
   extensions: string
   totalSize: string
-}
-
-function bytesToSize(bytes: number): string {
-  if (bytes >= 1073741824) {
-    return sanitizeDecimal(bytes / 1073741824) + ' GB'
-  } else if (bytes >= 1048576) {
-    return sanitizeDecimal(bytes / 1048576) + ' MB'
-  } else if (bytes >= 1024) {
-    return sanitizeDecimal(bytes / 1024) + ' KB'
-  } else if (bytes > 1) {
-    return bytes + ' bytes'
-  } else if (bytes == 1) {
-    return bytes + ' byte'
-  } else {
-    return '0 bytes'
-  }
 }
 
 function getErrorCountIconAndMessage(

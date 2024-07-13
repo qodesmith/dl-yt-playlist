@@ -32,7 +32,7 @@
   "homepage": "https://github.com/qodesmith/dl-yt-playlist#readme",
   "dependencies": {
     "@googleapis/youtube": "^14.0.0",
-    "@qodestack/utils": "^2.0.0",
+    "@qodestack/utils": "^2.3.0",
     "cli-progress": "^3.12.0",
     "sanitize-filename": "^1.6.3",
     "valibot": "^0.30.0"
