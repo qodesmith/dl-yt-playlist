@@ -364,18 +364,37 @@ export async function downloadYouTubePlaylist({
   })
 
   if (saveRawResponses) {
-    try {
-      await Bun.write(
-        `${directory}/youtubePlaylistResponses.json`,
-        JSON.stringify(playlistItemsResponses, null, 2)
-      )
-    } catch (error) {
-      failures.push({
-        type: 'Bun.write',
-        file: 'youtubePlaylistResponses.json',
-        error: errorToObject(error),
-        date: Date.now(),
-      })
+    const isFullFetch =
+      mostRecentItemsCount === undefined || mostRecentItemsCount === Infinity
+
+    if (isFullFetch) {
+      try {
+        await Bun.write(
+          `${directory}/youtubePlaylistResponses-full.json`,
+          JSON.stringify(playlistItemsResponses, null, 2)
+        )
+      } catch (error) {
+        failures.push({
+          type: 'Bun.write',
+          file: 'youtubePlaylistResponses-full.json',
+          error: errorToObject(error),
+          date: Date.now(),
+        })
+      }
+    } else {
+      try {
+        await Bun.write(
+          `${directory}/youtubePlaylistResponses.json`,
+          JSON.stringify(playlistItemsResponses, null, 2)
+        )
+      } catch (error) {
+        failures.push({
+          type: 'Bun.write',
+          file: 'youtubePlaylistResponses.json',
+          error: errorToObject(error),
+          date: Date.now(),
+        })
+      }
     }
   }
 
