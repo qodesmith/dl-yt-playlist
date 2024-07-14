@@ -5,7 +5,6 @@ import google from '@googleapis/youtube'
 import type {youtube_v3} from '@googleapis/youtube'
 import type {GaxiosResponse} from 'googleapis-common'
 import cliProgress from 'cli-progress'
-import sanitizeFilename from 'sanitize-filename'
 import {safeParse, parse, SchemaIssues} from 'valibot'
 import {
   PlaylistItemSchema,
