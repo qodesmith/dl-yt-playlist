@@ -435,7 +435,7 @@ export async function downloadYouTubePlaylist({
           dateAddedToPlaylist: snippet.publishedAt,
 
           /**
-           * Somethings YouTube returns a 404 response for these urls. We store
+           * Sometimes YouTube returns a 404 response for these urls. We store
            * multiple urls in highest quality descending order so that when we
            * go to download a thumbnail we get the best available version.
            */
