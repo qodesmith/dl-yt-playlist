@@ -695,15 +695,29 @@ export async function downloadYouTubePlaylist({
    */
   const potentialVideosToDownload = partialVideosWithDurationMetadata.filter(
     ({id, durationInSeconds, isUnavailable}) => {
+      const isVideoMissing = (() => {
+        /**
+         * Why do we return `true` here if we don't intend to download videos?
+         * Because we still want to "process" the videos by adding the
+         * `audioFileExtension` and `videoFileExtension` properties to the video
+         * objects we have in memory. They will both get a value of `null`.
+         */
+        if (downloadType === 'none') return true
+
+        if (downloadType === 'audio') return !existingAudioFilesObj[id]
+        if (downloadType === 'video') return !existingVideoFilesObj[id]
+        if (downloadType === 'both') {
+          return !existingAudioFilesObj[id] || !existingVideoFilesObj[id]
+        }
+      })()
+
       return (
-        // The download type isn't 'none'...
-        // downloadType !== 'none' &&
         // The video isn't too long...
         durationInSeconds <= maxDurationSeconds &&
         // The video isn't unavailable...
         !isUnavailable &&
         // The video hasn't already been downloaded...
-        (!existingAudioFilesObj[id] || !existingVideoFilesObj[id])
+        isVideoMissing
       )
     }
   )
