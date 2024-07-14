@@ -1626,18 +1626,18 @@ async function _downloadThumbnailFile({
  *
  * Thanks to perplexity.ai for generating this regex!
  */
-export const squareBracketIdRegex = /\[([a-zA-Z0-9_-]+)\]\.\w+$/
+// export const squareBracketIdRegex = /\[([a-zA-Z0-9_-]+)\]\.\w+$/
 
 const MAX_YOUTUBE_RESULTS = 50
 
 export type FileStatCategoryInfo = {
   totalSize: number
-  files: {file: string; id: string}[]
+  files: string[]
   extensionSet: Set<string>
 }
 
 export type FileStat = {
-  type: string
+  type: 'audio' | 'video' | 'thumbnail' | 'thumbnailSmall'
   fileCount: number
   extensions: string
   totalSize: string
@@ -1659,7 +1659,7 @@ function getErrorCountIconAndMessage(
 }
 
 function getFileStats(directory: string): FileStat[] {
-  const {audioData, videoData, thumbnailData} = [
+  const {audioData, videoData, thumbnailData, thumbnailSmallData} = [
     `${directory}/audio`,
     `${directory}/video`,
     `${directory}/thumbnails`,
@@ -1667,34 +1667,38 @@ function getFileStats(directory: string): FileStat[] {
     audioData: FileStatCategoryInfo
     videoData: FileStatCategoryInfo
     thumbnailData: FileStatCategoryInfo
+    thumbnailSmallData: FileStatCategoryInfo
   }>(
     (acc, dir) => {
       if (!fs.existsSync(dir)) return acc
 
       fs.readdirSync(dir).forEach(file => {
-        const id = file.match(squareBracketIdRegex)?.[1]
+        const extension = path.parse(file).ext.replace('.', '')
         const bunFile = Bun.file(`${dir}/${file}`)
         const type = bunFile.type.split('/')[0] // audio/mpeg => audio
-        const extension = path.parse(file).ext.replace('.', '')
 
-        if (id) {
-          if (type === 'audio') {
-            acc.audioData.files.push({file, id})
-            acc.audioData.totalSize += bunFile.size
-            acc.audioData.extensionSet.add(extension)
-          }
+        if (type === 'audio') {
+          acc.audioData.files.push(file)
+          acc.audioData.totalSize += bunFile.size
+          acc.audioData.extensionSet.add(extension)
+        }
 
-          if (type === 'video') {
-            acc.videoData.files.push({file, id})
-            acc.videoData.totalSize += bunFile.size
-            acc.videoData.extensionSet.add(extension)
-          }
+        if (type === 'video') {
+          acc.videoData.files.push(file)
+          acc.videoData.totalSize += bunFile.size
+          acc.videoData.extensionSet.add(extension)
         }
 
         if (type === 'image') {
-          acc.thumbnailData.files.push({file, id: file.slice(0, -4)})
-          acc.thumbnailData.totalSize += bunFile.size
-          acc.thumbnailData.extensionSet.add(extension)
+          if (file.includes('[small]')) {
+            acc.thumbnailSmallData.files.push(file)
+            acc.thumbnailSmallData.totalSize += bunFile.size
+            acc.thumbnailSmallData.extensionSet.add(extension)
+          } else {
+            acc.thumbnailData.files.push(file)
+            acc.thumbnailData.totalSize += bunFile.size
+            acc.thumbnailData.extensionSet.add(extension)
+          }
         }
       }, [])
 
@@ -1702,12 +1706,13 @@ function getFileStats(directory: string): FileStat[] {
     },
     {
       thumbnailData: {totalSize: 0, files: [], extensionSet: new Set()},
+      thumbnailSmallData: {totalSize: 0, files: [], extensionSet: new Set()},
       audioData: {totalSize: 0, files: [], extensionSet: new Set()},
       videoData: {totalSize: 0, files: [], extensionSet: new Set()},
     }
   )
 
-  return [
+  const dataWithTotalSizeNumbers = [
     {
       type: 'audio',
       totalSize: audioData.totalSize,
@@ -1726,10 +1731,17 @@ function getFileStats(directory: string): FileStat[] {
       fileCount: thumbnailData.files.length,
       extensions: [...thumbnailData.extensionSet].join(', '),
     },
-  ]
-    .sort((a, b) => {
-      return b.totalSize - a.totalSize
-    })
+    {
+      type: 'thumbnailSmall',
+      totalSize: thumbnailSmallData.totalSize,
+      fileCount: thumbnailSmallData.files.length,
+      extensions: [...thumbnailSmallData.extensionSet].join(', '),
+    },
+  ] as const
+
+  return dataWithTotalSizeNumbers
+    .slice() // Because TypeScript...
+    .sort((a, b) => b.totalSize - a.totalSize)
     .reduce<FileStat[]>((acc, {totalSize, ...rest}) => {
       if (totalSize) {
         acc.push({...rest, totalSize: bytesToSize(totalSize)})
@@ -1853,8 +1865,8 @@ function getExistingFilesObj(directory: string) {
       return fs
         .readdirSync(dir)
         .reduce<Record<string, string>>((acc, fileName) => {
-          const id = fileName.match(squareBracketIdRegex)?.[1]
-          if (id) acc[id] = fileName
+          const {name} = path.parse(fileName)
+          acc[name] = fileName
 
           return acc
         }, {})
@@ -1935,11 +1947,10 @@ export async function downloadVideo({
    */
 
   const videoInfoResponse = await $`yt-dlp -J ${url}`.quiet()
-  const {title: rawTitle} = parse(
+  const videoInfoResponseParsed = parse(
     YtDlpJsonSchema,
     JSON.parse(videoInfoResponse.stdout.toString())
   )
-  const title = sanitizeFilename(rawTitle, {replacement: ' '})
 
   /**
    * *********
@@ -1953,9 +1964,9 @@ export async function downloadVideo({
     .readdirSync(directory)
     .reduce<{audioExists: boolean; videoExists: boolean}>(
       (acc, item) => {
-        const id = item.match(squareBracketIdRegex)?.[1]
+        const expectedFileName = `${videoInfoResponseParsed.id}.${fileFormat}`
 
-        if (id) {
+        if (item === expectedFileName) {
           const type = Bun.file(`${directory}/${item}`).type.split('/')[0]
 
           if (type === 'audio') acc.audioExists = true
@@ -1975,7 +1986,7 @@ export async function downloadVideo({
    */
 
   const downloadFileResponse = await (() => {
-    const template = `${directory}/${title} [%(id)s].%(ext)s`
+    const template = `${directory}/%(id)s.%(ext)s`
 
     if (downloadType === 'audio') {
       if (audioExists && !overwrite) {
@@ -2005,6 +2016,7 @@ export async function downloadVideo({
 
   const {
     id,
+    title,
     description,
     duration: durationInSeconds,
     channel_id: channelId,
