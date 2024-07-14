@@ -348,6 +348,8 @@ export async function downloadYouTubePlaylist({
    * the entire process. This is helpful to gauge against quotas.
    */
   const youTubeFetchCount = {count: 0}
+  const isFullFetch =
+    mostRecentItemsCount === undefined || mostRecentItemsCount === Infinity
 
   /**
    * Raw responses from the YouTube
@@ -364,9 +366,6 @@ export async function downloadYouTubePlaylist({
   })
 
   if (saveRawResponses) {
-    const isFullFetch =
-      mostRecentItemsCount === undefined || mostRecentItemsCount === Infinity
-
     if (isFullFetch) {
       try {
         await Bun.write(
@@ -477,7 +476,7 @@ export async function downloadYouTubePlaylist({
    * Now that we've retrieved everything the
    * [PlaylistItems API](https://developers.google.com/youtube/v3/docs/playlistItems)
    * will give us, filter out unavailble videos to potentially reduce how many
-   * fetch calls are made the
+   * fetch calls are made by the
    * [VideosList API](https://developers.google.com/youtube/v3/docs/videos/list)
    * coming up and add missing metadata to unavailable videos.
    */
@@ -585,18 +584,34 @@ export async function downloadYouTubePlaylist({
   }, Promise.resolve([]))
 
   if (saveRawResponses) {
-    try {
-      await Bun.write(
-        `${directory}/youtubeVideoResponses.json`,
-        JSON.stringify(videosListResponses, null, 2)
-      )
-    } catch (error) {
-      failures.push({
-        type: 'Bun.write',
-        file: 'youtubeVideoResponses.json',
-        error: errorToObject(error),
-        date: Date.now(),
-      })
+    if (isFullFetch) {
+      try {
+        await Bun.write(
+          `${directory}/youtubeVideoResponses-full.json`,
+          JSON.stringify(videosListResponses, null, 2)
+        )
+      } catch (error) {
+        failures.push({
+          type: 'Bun.write',
+          file: 'youtubeVideoResponses-full.json',
+          error: errorToObject(error),
+          date: Date.now(),
+        })
+      }
+    } else {
+      try {
+        await Bun.write(
+          `${directory}/youtubeVideoResponses.json`,
+          JSON.stringify(videosListResponses, null, 2)
+        )
+      } catch (error) {
+        failures.push({
+          type: 'Bun.write',
+          file: 'youtubeVideoResponses.json',
+          error: errorToObject(error),
+          date: Date.now(),
+        })
+      }
     }
   }
 
