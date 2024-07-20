@@ -5,7 +5,7 @@ import google from '@googleapis/youtube'
 import type {youtube_v3} from '@googleapis/youtube'
 import type {GaxiosResponse} from 'googleapis-common'
 import cliProgress from 'cli-progress'
-import {safeParse, parse, SchemaIssues} from 'valibot'
+import {safeParse, parse, InferIssue} from 'valibot'
 import {
   PlaylistItemSchema,
   VideosListItemSchema,
@@ -71,11 +71,18 @@ export type Failure = {date: number} & (
     }
   | {
       type: 'schemaParse'
-      schemaName:
-        | 'PlaylistItemSchema'
-        | 'VideosListItemSchema'
-        | 'YtDlpJsonSchema'
-      issues: SchemaIssues
+      schemaName: 'PlaylistItemSchema'
+      issues: InferIssue<typeof PlaylistItemSchema>[]
+    }
+  | {
+      type: 'schemaParse'
+      schemaName: 'VideosListItemSchema'
+      issues: InferIssue<typeof VideosListItemSchema>[]
+    }
+  | {
+      type: 'schemaParse'
+      schemaName: 'YtDlpJsonSchema'
+      issues: InferIssue<typeof YtDlpJsonSchema>[]
     }
   | {
       type: 'videosListApi'
