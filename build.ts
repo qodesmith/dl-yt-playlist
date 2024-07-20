@@ -1,4 +1,5 @@
 import dts from 'bun-plugin-dts'
+import pkgJson from './package.json'
 
 const start = performance.now()
 
@@ -6,7 +7,7 @@ await Bun.build({
   entrypoints: ['./src/main.ts'],
   outdir: './dist',
   target: 'bun',
-  external: ['@googleapis/youtube'],
+  external: Object.keys(pkgJson.dependencies),
   plugins: [dts()],
 })
 
