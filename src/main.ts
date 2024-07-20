@@ -24,6 +24,8 @@ import {
 export type Video = {
   /** listApi.snippet.resourceId.videoId */
   id: string
+  /** listApi.id */
+  playlistItemId: string
   /** listApi.snippet.title */
   title: string
   /** listApi.snippet.description */
@@ -425,6 +427,7 @@ export async function downloadYouTubePlaylist({
 
         acc.push({
           id: snippet.resourceId.videoId,
+          playlistItemId: results.output.id,
           title: snippet.title,
           description: snippet.description,
           channelId: snippet.videoOwnerChannelId,

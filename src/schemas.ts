@@ -7,6 +7,7 @@ import {object, string, number, optional, array, minLength} from 'valibot'
  * available.
  */
 export const PlaylistItemSchema = object({
+  id: string(),
   snippet: object({
     resourceId: object({
       videoId: string(), // id
