@@ -1,4 +1,4 @@
-import {object, string, number, optional, array, minLength} from 'valibot'
+import {object, string, number, optional, array, minLength, pipe} from 'valibot'
 
 /**
  * This schema is used to parse the response from the YouTube
@@ -59,10 +59,12 @@ export const YtDlpJsonSchema = object({
   upload_date: string(), // e.x. 20240221 (i.e. 2/21/2024)
   channel: string(), // Channel name.
   ext: string(), // Video file extension.
-  requested_downloads: array(
-    object({
-      ext: string(), // Audio file extension.
-    }),
-    [minLength(1)]
+  requested_downloads: pipe(
+    array(
+      object({
+        ext: string(), // Audio file extension.
+      })
+    ),
+    minLength(1)
   ),
 })
