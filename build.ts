@@ -4,7 +4,7 @@ import pkgJson from './package.json'
 const start = performance.now()
 
 await Bun.build({
-  entrypoints: ['./src/main.ts'],
+  entrypoints: ['./src/main.ts', './src/schemas.ts'],
   outdir: './dist',
   target: 'bun',
   external: Object.keys(pkgJson.dependencies),
