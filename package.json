@@ -9,8 +9,7 @@
     "access": "public"
   },
   "scripts": {
-    "audio": "bun downloadYoutubePlaylist.ts --audioOnly",
-    "video": "bun downloadYoutubePlaylist.ts",
+    "typecheck": "bun tsc --noEmit",
     "build": "bun build.ts",
     "publishPackage": "npm run build && npm publish"
   },
