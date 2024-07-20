@@ -3,15 +3,28 @@
   "module": "./dist/main.js",
   "main": "./dist/main.js",
   "type": "module",
-  "types": "./dist/main.d.ts",
   "version": "7.2.0",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/main.d.ts",
+        "default": "./dist/main.js"
+      }
+    },
+    "./schemas": {
+      "import": {
+        "types": "./dist/schemas.d.ts",
+        "default": "./dist/schemas.js"
+      }
+    }
+  },
   "publishConfig": {
     "access": "public"
   },
   "scripts": {
     "typecheck": "bun tsc --noEmit",
     "build": "bun build.ts",
-    "publishPackage": "npm run build && npm publish"
+    "publishPackage": "npm run typecheck && npm run build && npm publish"
   },
   "description": "Download all videos (or audio only) from a YouTube playlist!",
   "repository": {
