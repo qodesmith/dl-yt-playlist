@@ -30,14 +30,14 @@
   },
   "homepage": "https://github.com/qodesmith/dl-yt-playlist#readme",
   "dependencies": {
-    "@googleapis/youtube": "^14.0.0",
+    "@googleapis/youtube": "^19.0.0",
     "@qodestack/utils": "^2.3.1",
     "cli-progress": "^3.12.0",
-    "valibot": "^0.30.0"
+    "valibot": "^0.36.0"
   },
   "devDependencies": {
-    "@types/cli-progress": "^3.11.5",
-    "bun-plugin-dts": "^0.2.1",
+    "@types/cli-progress": "^3.11.6",
+    "bun-plugin-dts": "^0.2.3",
     "bun-types": "latest"
   }
 }
