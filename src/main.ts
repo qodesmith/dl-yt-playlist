@@ -1,6 +1,7 @@
 import {$} from 'bun'
 import fs from 'node:fs'
 import path from 'node:path'
+import {execSync} from 'node:child_process'
 import google from '@googleapis/youtube'
 import type {youtube_v3} from '@googleapis/youtube'
 import type {GaxiosResponse} from 'googleapis-common'
@@ -52,11 +53,13 @@ export type Video = {
   videoFileExtension: string | null
   /** Derived from the listApi missing certain fields */
   isUnavailable: boolean
+  /** LUFS value, as calculated by ffmpeg */
+  lufs: number | null
 }
 
 type PartialVideo = Omit<
   Video,
-  'durationInSeconds' | 'audioFileExtension' | 'videoFileExtension'
+  'durationInSeconds' | 'audioFileExtension' | 'videoFileExtension' | 'lufs'
 >
 
 type PartialVideoWithDuration = PartialVideo & Pick<Video, 'durationInSeconds'>
@@ -109,6 +112,11 @@ export type Failure = {date: number} & (
       type: 'thumbnailUrlNotAvailable'
       urls: string[]
       videoId: string
+    }
+  | {
+      type: 'lufs'
+      filePath: string
+      errorMessage: string
     }
 )
 
@@ -500,6 +508,7 @@ export async function downloadYouTubePlaylist({
           durationInSeconds: 0,
           audioFileExtension: null,
           videoFileExtension: null,
+          lufs: null,
         })
       } else {
         acc.videoIdsToFetch.push(partialVideo.id)
@@ -824,10 +833,22 @@ export async function downloadYouTubePlaylist({
 
           fs.renameSync(oldAudioPath, newAudioPath)
 
+          const lufs = getLufsForFile(newAudioPath)
+
+          if (typeof lufs !== 'number') {
+            failures.push({
+              type: 'lufs',
+              filePath: newAudioPath,
+              errorMessage: lufs.error,
+              date: Date.now(),
+            })
+          }
+
           return {
             ...partialVideoWithDuration,
             audioFileExtension,
             videoFileExtension,
+            lufs: typeof lufs === 'number' ? lufs : null,
           }
         })
     }
@@ -869,11 +890,23 @@ export async function downloadYouTubePlaylist({
           }
 
           const {ext: videoFileExtension} = parsedResults.output
+          const filePath = `${videoDir}/${id}.${videoFileExtension}`
+          const lufs = getLufsForFile(filePath)
+
+          if (typeof lufs !== 'number') {
+            failures.push({
+              type: 'lufs',
+              filePath,
+              errorMessage: lufs.error,
+              date: Date.now(),
+            })
+          }
 
           return {
             ...partialVideoWithDuration,
             audioFileExtension: null,
             videoFileExtension,
+            lufs: typeof lufs === 'number' ? lufs : null,
           }
         })
     }
@@ -915,11 +948,24 @@ export async function downloadYouTubePlaylist({
           }
 
           const {requested_downloads} = parsedResults.output
+          const audioFileExtension = requested_downloads[0]!.ext
+          const filePath = `${audioDir}/${id}.${audioFileExtension}`
+          const lufs = getLufsForFile(filePath)
+
+          if (typeof lufs !== 'number') {
+            failures.push({
+              type: 'lufs',
+              filePath,
+              errorMessage: lufs.error,
+              date: Date.now(),
+            })
+          }
 
           return {
             ...partialVideoWithDuration,
-            audioFileExtension: requested_downloads[0]!.ext,
+            audioFileExtension,
             videoFileExtension: null,
+            lufs: typeof lufs === 'number' ? lufs : null,
           }
         })
     }
@@ -931,6 +977,7 @@ export async function downloadYouTubePlaylist({
         ...partialVideoWithDuration,
         audioFileExtension: null,
         videoFileExtension: null,
+        lufs: null,
       })
     }
 
@@ -1214,10 +1261,22 @@ export async function downloadYouTubePlaylist({
             ? path.parse(existingVideo).ext.slice(1)
             : null
 
+          // Get the lufs value.
+          const lufs = (() => {
+            if (!existingAudio && !existingVideo) return null
+
+            const typeDir = existingAudio ? audioDir : videoDir
+            const ext = existingAudio ? audioFileExtension : videoFileExtension
+            const filePath = `${typeDir}/${id}.${ext}`
+
+            return getLufsForFile(filePath)
+          })()
+
           return {
             ...partialVideoWithDuration,
             audioFileExtension,
             videoFileExtension,
+            lufs: typeof lufs === 'number' ? lufs : null,
           }
         })
       }
@@ -1331,6 +1390,7 @@ export async function downloadYouTubePlaylist({
       ytdlpFailure: [],
       thumbnailDownload: [],
       thumbnailUrlNotAvailable: [],
+      lufs: [],
     }
   )
 
@@ -2092,4 +2152,23 @@ export async function genDuplicatePlaylistEntries({
   })
 
   return duplicates
+}
+
+export function getLufsForFile(filePath: string): number | {error: string} {
+  try {
+    const command = `ffmpeg -i ${filePath} -filter_complex ebur128 -f null - 2>&1 | grep -E 'I:.+ LUFS$' | tail -1`
+    const result = execSync(command)
+    const resArray = result.toString().trim().split(' ') // ["I:", "", "", "", "", "", "", "", "", "-12.8", "LUFS"]
+    const lastItem = resArray.at(-1)
+    const isError = !lastItem || lastItem.toLowerCase() !== 'lufs'
+
+    if (isError) return {error: 'Unable to parse LUFS from ffmpeg command'}
+
+    const valueItem = resArray.at(-2)
+    const num = Number(valueItem)
+
+    return isNaN(num) ? {error: `Unexpected \`NaN\`: ${valueItem}`} : num
+  } catch (e) {
+    return {error: (e as Error).message}
+  }
 }
