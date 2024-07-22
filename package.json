@@ -3,7 +3,7 @@
   "module": "./dist/main.js",
   "main": "./dist/main.js",
   "type": "module",
-  "version": "7.3.0",
+  "version": "7.4.0",
   "exports": {
     ".": {
       "import": {
