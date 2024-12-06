@@ -42,6 +42,7 @@
     "url": "https://github.com/qodesmith/dl-yt-playlist/issues"
   },
   "homepage": "https://github.com/qodesmith/dl-yt-playlist#readme",
+  "prettier": "@qodestack/prettier-config",
   "dependencies": {
     "@googleapis/youtube": "^19.0.0",
     "@qodestack/utils": "^2.3.1",
@@ -49,8 +50,17 @@
     "valibot": "^0.36.0"
   },
   "devDependencies": {
+    "@eslint/js": "^9.16.0",
+    "@qodestack/prettier-config": "^1.0.2",
     "@types/cli-progress": "^3.11.6",
+    "@typescript-eslint/parser": "^8.17.0",
     "bun-plugin-dts": "^0.2.3",
-    "bun-types": "latest"
+    "bun-types": "latest",
+    "eslint": "^9.16.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-import-resolver-typescript": "^3.6.3",
+    "eslint-plugin-import": "^2.31.0",
+    "globals": "^15.12.0",
+    "typescript-eslint": "^8.16.0"
   }
 }
