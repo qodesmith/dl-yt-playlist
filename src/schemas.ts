@@ -1,4 +1,14 @@
-import {object, string, number, optional, array, minLength, pipe} from 'valibot'
+import {
+  object,
+  string,
+  number,
+  optional,
+  array,
+  minLength,
+  pipe,
+  nullable,
+  boolean,
+} from 'valibot'
 
 /**
  * This schema is used to parse the response from the YouTube
@@ -67,4 +77,53 @@ export const YtDlpJsonSchema = object({
     ),
     minLength(1)
   ),
+})
+
+export const VideoSchema = object({
+  /** listApi.snippet.resourceId.videoId */
+  id: string(),
+
+  /** listApi.id */
+  playlistItemId: string(),
+
+  /** listApi.snippet.title */
+  title: string(),
+
+  /** listApi.snippet.description */
+  description: string(),
+
+  /** listApi.snippet.videoOwnerChannelId */
+  channelId: string(),
+
+  /** listApi.snippet.videoOwnerChannelTitle */
+  channelName: string(),
+
+  /** listApi.contentDetails.videoPublishedAt */
+  dateCreated: string(),
+
+  /** listApi.snippet.publishedAt */
+  dateAddedToPlaylist: string(),
+
+  /** listApi.snippet.thumbnails[maxres | standard | high | medium | default].url */
+  thumbnailUrls: array(string()),
+  /** videosApi.contentDetails.duration */
+  durationInSeconds: number(),
+
+  /** Constructed from `id` - URL to the video */
+  url: string(),
+
+  /** Constructed from `channelId` - URL to the video owner's channel */
+  channelUrl: nullable(string()),
+
+  /** Derived from yt-dlp */
+  audioFileExtension: nullable(string()),
+
+  /** Derived from yt-dlp */
+  videoFileExtension: nullable(string()),
+
+  /** Derived from the listApi missing certain fields */
+  isUnavailable: boolean(),
+
+  /** LUFS value, as calculated by ffmpeg */
+  lufs: nullable(number()),
 })

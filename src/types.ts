@@ -1,48 +1,16 @@
 import type {youtube_v3} from '@googleapis/youtube'
 import type {GaxiosResponse} from 'googleapis-common'
 
-import {InferIssue} from 'valibot'
+import {InferInput, InferIssue} from 'valibot'
 
 import {
   PlaylistItemSchema,
+  VideoSchema,
   VideosListItemSchema,
   YtDlpJsonSchema,
 } from './schemas'
 
-export type Video = {
-  /** listApi.snippet.resourceId.videoId */
-  id: string
-  /** listApi.id */
-  playlistItemId: string
-  /** listApi.snippet.title */
-  title: string
-  /** listApi.snippet.description */
-  description: string
-  /** listApi.snippet.videoOwnerChannelId */
-  channelId: string
-  /** listApi.snippet.videoOwnerChannelTitle */
-  channelName: string
-  /** listApi.contentDetails.videoPublishedAt */
-  dateCreated: string
-  /** listApi.snippet.publishedAt */
-  dateAddedToPlaylist: string
-  /** listApi.snippet.thumbnails[maxres | standard | high | medium | default].url */
-  thumbnailUrls: string[]
-  /** videosApi.contentDetails.duration */
-  durationInSeconds: number
-  /** Constructed from `id` - URL to the video */
-  url: string
-  /** Constructed from `channelId` - URL to the video owner's channel */
-  channelUrl: string | null
-  /** Derived from yt-dlp */
-  audioFileExtension: string | null
-  /** Derived from yt-dlp */
-  videoFileExtension: string | null
-  /** Derived from the listApi missing certain fields */
-  isUnavailable: boolean
-  /** LUFS value, as calculated by ffmpeg */
-  lufs: number | null
-}
+export type Video = InferInput<typeof VideoSchema>
 
 export type PartialVideo = Omit<
   Video,
