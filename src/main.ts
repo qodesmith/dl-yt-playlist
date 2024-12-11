@@ -33,6 +33,8 @@ import {
   sanitizeTime,
 } from './utils'
 
+export {downloadYouTubeVideo} from './downloadYouTubeVideo'
+
 export async function downloadYouTubePlaylist(
   options: DownloadYouTubePlaylistInput
 ): Promise<DownloadYouTubePlaylistOutput> {
@@ -97,11 +99,6 @@ export async function downloadYouTubePlaylist(
   }
 
   if (!ytDlpPath || !ffmpegPath) {
-    /**
-     * This is the only place we exit the process in `downloadYouTubePlaylist`.
-     * All other errors or failures get stored in the `Failures` array and
-     * returned to the user upon completion.
-     */
     throw new Error('Missing `yt-dlp` or `ffmpeg`')
   }
 
