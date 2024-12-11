@@ -24,7 +24,8 @@
   "scripts": {
     "typecheck": "bun tsc --noEmit",
     "build": "bun build.ts",
-    "publishPackage": "npm run typecheck && npm run build && npm publish"
+    "publishPackage": "npm run typecheck && npm run build && npm publish",
+    "test": "bun test --timeout=30000 --bail=1 ./test/test.ts"
   },
   "description": "Download all videos (or audio only) from a YouTube playlist!",
   "repository": {
@@ -44,8 +45,8 @@
   "homepage": "https://github.com/qodesmith/dl-yt-playlist#readme",
   "prettier": "@qodestack/prettier-config",
   "dependencies": {
-    "@googleapis/youtube": "^19.0.0",
-    "@qodestack/utils": "^2.3.1",
+    "@googleapis/youtube": "^20.0.0",
+    "@qodestack/utils": "^2.8.0",
     "cli-progress": "^3.12.0",
     "valibot": "^0.36.0"
   },
@@ -54,11 +55,12 @@
     "@qodestack/prettier-config": "^1.0.2",
     "@types/cli-progress": "^3.11.6",
     "@typescript-eslint/parser": "^8.17.0",
-    "bun-plugin-dts": "^0.2.3",
+    "bun-plugin-dts": "^0.3.0",
     "bun-types": "latest",
+    "dotenv": "^16.4.7",
     "eslint": "^9.16.0",
     "eslint-config-prettier": "^9.1.0",
-    "eslint-import-resolver-typescript": "^3.6.3",
+    "eslint-import-resolver-typescript": "^3.7.0",
     "eslint-plugin-import": "^2.31.0",
     "globals": "^15.12.0",
     "typescript-eslint": "^8.16.0"

@@ -3,5 +3,6 @@ data
 dist
 .env
 .DS_Store
-test.ts
+scratchPad.ts
 Beats
+test/media/
