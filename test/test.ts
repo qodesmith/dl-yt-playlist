@@ -242,7 +242,7 @@ describe('downloadYoutubePlaylist', () => {
     ])
   })
 
-  test.only('unavailable video (title is "Private video" or "Deleted video")', async () => {
+  test('unavailable video (title is "Private video" or "Deleted video")', async () => {
     await genMockYoutubeResponses({
       deletedIds: ['JKEJBeoEGfk', 'SL22bO3Luw8', 'y6ZeWhBtKVk', 'H4mCs2Mg-dc'],
       privateIds: ['gIdp_KplH50', 'Fp6CnOG2VS0'],
