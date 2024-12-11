@@ -279,4 +279,6 @@ describe('downloadYoutubePlaylist', () => {
     expect(videoContents).toBeArrayOfSize(3)
     expect(thumbnailContents).toBeArrayOfSize(3)
   })
+
+  test('returned failures', async () => {})
 })

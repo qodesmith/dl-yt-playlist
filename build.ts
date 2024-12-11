@@ -1,4 +1,5 @@
 import dts from 'bun-plugin-dts'
+
 import pkgJson from './package.json'
 
 const start = performance.now()
