@@ -241,4 +241,42 @@ describe('downloadYoutubePlaylist', () => {
       'youTubeFetchCount',
     ])
   })
+
+  test.only('unavailable video (title is "Private video" or "Deleted video")', async () => {
+    await genMockYoutubeResponses({
+      deletedIds: ['JKEJBeoEGfk', 'SL22bO3Luw8', 'y6ZeWhBtKVk', 'H4mCs2Mg-dc'],
+      privateIds: ['gIdp_KplH50', 'Fp6CnOG2VS0'],
+    })
+
+    const results = await downloadYouTubePlaylist({
+      ...baseOptions,
+      downloadType: 'both',
+      getIdsForDownload: ids => ids,
+      directory: mediaDir,
+      audioFormat: 'mp3',
+      videoFormat: 'mp4',
+      downloadThumbnails: true,
+    })
+
+    expect(results.downloadCount).toEqual({audio: 3, video: 3, thumbnail: 3})
+    expect(results.videosDownloaded).toBeArrayOfSize(3)
+
+    expect(fs.existsSync(`${mediaDir}/audio`)).toBeTrue()
+    expect(fs.existsSync(`${mediaDir}/video`)).toBeTrue()
+    expect(fs.existsSync(`${mediaDir}/thumbnails`)).toBeTrue()
+
+    const audioContents = fs.readdirSync(`${mediaDir}/audio`, {
+      withFileTypes: true,
+    })
+    const videoContents = fs.readdirSync(`${mediaDir}/video`, {
+      withFileTypes: true,
+    })
+    const thumbnailContents = fs.readdirSync(`${mediaDir}/thumbnails`, {
+      withFileTypes: true,
+    })
+
+    expect(audioContents).toBeArrayOfSize(3)
+    expect(videoContents).toBeArrayOfSize(3)
+    expect(thumbnailContents).toBeArrayOfSize(3)
+  })
 })
