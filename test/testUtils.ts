@@ -38,12 +38,12 @@ export async function genMockYoutubeResponses({
   // Update deleted or private video titles to how the API would return them.
   playlistResponses.forEach(response => {
     response.items?.forEach(item => {
-      if (item.id && item.snippet) {
-        if (deletedIds?.includes(item.id)) {
+      if (item.snippet) {
+        if (deletedIds?.includes(item.snippet?.resourceId?.videoId ?? '')) {
           item.snippet.title = 'Deleted video'
         }
 
-        if (privateIds?.includes(item.id)) {
+        if (privateIds?.includes(item.snippet?.resourceId?.videoId ?? '')) {
           item.snippet.title = 'Private video'
         }
       }
