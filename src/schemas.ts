@@ -3,7 +3,7 @@ import {object, string, number, optional, array, minLength, pipe} from 'valibot'
 /**
  * This schema is used to parse the response from the YouTube
  * [PlaylistItems API](https://developers.google.com/youtube/v3/docs/playlistItems).
- * Optional properties are marked as so to accommodate videos no longer
+ * Optional properties are marked so as to accommodate videos no longer
  * available.
  */
 export const PlaylistItemSchema = object({
