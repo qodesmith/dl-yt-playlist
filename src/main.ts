@@ -515,19 +515,22 @@ export async function downloadYouTubePlaylist(
   const videoDir = `${directory}/video`
   const thumbnailDirectory = `${directory}/thumbnails`
 
-  // Create audio directory.
-  if (downloadType === 'audio' || downloadType === 'both') {
-    mkdirSafe(audioDir)
-  }
+  // Create directories only if there are videos to download.
+  if (idsToDownload.length) {
+    // Create audio directory.
+    if (downloadType === 'audio' || downloadType === 'both') {
+      mkdirSafe(audioDir)
+    }
 
-  // Create video directory.
-  if (downloadType === 'video' || downloadType === 'both') {
-    mkdirSafe(videoDir)
-  }
+    // Create video directory.
+    if (downloadType === 'video' || downloadType === 'both') {
+      mkdirSafe(videoDir)
+    }
 
-  // Create thumnails directory.
-  if (downloadThumbnails) {
-    mkdirSafe(thumbnailDirectory)
+    // Create thumnails directory.
+    if (downloadThumbnails) {
+      mkdirSafe(thumbnailDirectory)
+    }
   }
 
   const startProcessing = performance.now()
