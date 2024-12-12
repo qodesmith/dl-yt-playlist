@@ -280,7 +280,7 @@ describe('downloadYoutubePlaylist', () => {
     expect(thumbnailContents).toBeArrayOfSize(3)
   })
 
-  test.only('getIdsForDownload failure', async () => {
+  test('getIdsForDownload failure', async () => {
     const errorMessage = 'Nope!'
     const results = await downloadYouTubePlaylist({
       ...baseOptions,
