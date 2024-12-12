@@ -280,5 +280,32 @@ describe('downloadYoutubePlaylist', () => {
     expect(thumbnailContents).toBeArrayOfSize(3)
   })
 
-  test('returned failures', async () => {})
+  test.only('getIdsForDownload failure', async () => {
+    const errorMessage = 'Nope!'
+    const results = await downloadYouTubePlaylist({
+      ...baseOptions,
+      downloadType: 'both',
+      getIdsForDownload: async () => {
+        throw new Error(errorMessage)
+      },
+      directory: mediaDir,
+      audioFormat: 'mp3',
+      videoFormat: 'mp4',
+      downloadThumbnails: true,
+    })
+
+    const failure = results.failures.find(
+      f => f.type === 'generic' && f.context === 'getIdsForDownload'
+    )
+
+    // @ts-expect-error this is the correct type.
+    expect((failure?.error as Error).message).toBe(errorMessage)
+    expect(fs.existsSync(`${mediaDir}/audio`)).toBeFalse()
+    expect(fs.existsSync(`${mediaDir}/video`)).toBeFalse()
+    expect(fs.existsSync(`${mediaDir}/thumbnails`)).toBeFalse()
+    expect(results.videosDownloaded).toEqual([])
+    expect(results.downloadCount).toEqual({audio: 0, video: 0, thumbnail: 0})
+  })
+
+  // test('returned failures', async () => {})
 })
