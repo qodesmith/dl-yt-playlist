@@ -64,7 +64,7 @@ export async function downloadYouTubeVideo({
   const template = `${directory}/%(id)s.%(ext)s`
   const failures: SingleVideoFailure[] = []
   const video: SingleVideo | null =
-    await $`yt-dlp -o "${template}" -J --no-simulate ${url}`
+    await $`yt-dlp --js-runtimes bun -o "${template}" -J --no-simulate ${url}`
       .nothrow()
       .quiet()
       .then(({exitCode, stdout, stderr}) => {

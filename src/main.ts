@@ -581,8 +581,8 @@ export async function downloadYouTubePlaylist(
           const {audioFormat} = options
 
           return {
-            shellPromise: $`yt-dlp -o "${audioTemplate}" --extract-audio --audio-format="${audioFormat}" -J --no-simulate ${url}`,
-            template: `yt-dlp -o "${audioTemplate}" --extract-audio --audio-format="${audioFormat}" -J --no-simulate ${url}`,
+            shellPromise: $`yt-dlp --js-runtimes bun -o "${audioTemplate}" --extract-audio --audio-format="${audioFormat}" -J --no-simulate ${url}`,
+            template: `yt-dlp --js-runtimes bun -o "${audioTemplate}" --extract-audio --audio-format="${audioFormat}" -J --no-simulate ${url}`,
           }
         }
 
@@ -590,16 +590,16 @@ export async function downloadYouTubePlaylist(
           const {videoFormat} = options
 
           return {
-            shellPromise: $`yt-dlp -o "${videoTemplate}" --format="${videoFormat}" -J --no-simulate ${url}`,
-            template: `yt-dlp -o "${videoTemplate}" --format="${videoFormat}" -J --no-simulate ${url}`,
+            shellPromise: $`yt-dlp --js-runtimes bun -o "${videoTemplate}" --format="${videoFormat}" -J --no-simulate ${url}`,
+            template: `yt-dlp --js-runtimes bun -o "${videoTemplate}" --format="${videoFormat}" -J --no-simulate ${url}`,
           }
         }
 
         const {audioFormat, videoFormat} = options
 
         return {
-          shellPromise: $`yt-dlp -o "${videoTemplate}" --format="${videoFormat}" --extract-audio --audio-format="${audioFormat}" -k -J --no-simulate ${url}`,
-          template: `yt-dlp -o "${videoTemplate}" --format="${videoFormat}" --extract-audio --audio-format="${audioFormat}" -k -J --no-simulate ${url}`,
+          shellPromise: $`yt-dlp --js-runtimes bun -o "${videoTemplate}" --format="${videoFormat}" --extract-audio --audio-format="${audioFormat}" -k -J --no-simulate ${url}`,
+          template: `yt-dlp --js-runtimes bun -o "${videoTemplate}" --format="${videoFormat}" --extract-audio --audio-format="${audioFormat}" -k -J --no-simulate ${url}`,
         }
       })()
 
