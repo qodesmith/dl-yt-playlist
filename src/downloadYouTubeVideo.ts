@@ -1,8 +1,8 @@
 import type {BaseIssue} from 'valibot'
 
+import {$} from 'bun'
 import fs from 'node:fs'
 
-import {$} from 'bun'
 import {safeParse} from 'valibot'
 
 import {YtDlpJsonSchema} from './schemas'

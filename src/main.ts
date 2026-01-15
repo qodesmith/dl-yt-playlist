@@ -1,3 +1,5 @@
+import type {youtube_v3} from '@googleapis/youtube'
+import type {GaxiosResponseWithHTTP2} from 'googleapis-common'
 import type {
   DownloadCount,
   DownloadYouTubePlaylistInput,
@@ -7,14 +9,12 @@ import type {
   PartialVideoWithDuration,
   Video,
 } from './types'
-import type {youtube_v3} from '@googleapis/youtube'
-import type {GaxiosResponse} from 'googleapis-common'
 
+import {$} from 'bun'
 import fs from 'node:fs'
 
 import google from '@googleapis/youtube'
 import {chunkArray, createLogger, emptyLog, pluralize} from '@qodestack/utils'
-import {$} from 'bun'
 import cliProgress from 'cli-progress'
 import {safeParse} from 'valibot'
 
@@ -33,6 +33,7 @@ import {
   sanitizeTime,
 } from './utils'
 
+// biome-ignore lint/performance/noBarrelFile: it's ok
 export {downloadYouTubeVideo} from './downloadYouTubeVideo'
 
 export async function downloadYouTubePlaylist(
@@ -98,7 +99,7 @@ export async function downloadYouTubePlaylist(
     )
   }
 
-  if (!ytDlpPath || !ffmpegPath) {
+  if (!(ytDlpPath && ffmpegPath)) {
     throw new Error('Missing `yt-dlp` or `ffmpeg`')
   }
 
@@ -171,14 +172,7 @@ export async function downloadYouTubePlaylist(
       response.data.items?.forEach(item => {
         const results = safeParse(PlaylistItemSchema, item)
 
-        if (!results.success) {
-          failures.push({
-            type: 'schemaParse',
-            schemaName: 'PlaylistItemSchema',
-            issues: results.issues,
-            date: Date.now(),
-          })
-        } else {
+        if (results.success) {
           const {snippet, contentDetails} = results.output
           const isUnavailable =
             snippet.title === 'Private video' ||
@@ -209,6 +203,13 @@ export async function downloadYouTubePlaylist(
             url: `https://www.youtube.com/watch?v=${snippet.resourceId.videoId}`,
             channelUrl: `https://www.youtube.com/channel/${snippet.videoOwnerChannelId}`,
             isUnavailable,
+          })
+        } else {
+          failures.push({
+            type: 'schemaParse',
+            schemaName: 'PlaylistItemSchema',
+            issues: results.issues,
+            date: Date.now(),
           })
         }
       })
@@ -327,7 +328,9 @@ export async function downloadYouTubePlaylist(
    */
   const videoListResponses = await fetchIdChunks
     .reduce<
-      Promise<(GaxiosResponse<youtube_v3.Schema$VideoListResponse> | null)[]>
+      Promise<
+        (GaxiosResponseWithHTTP2<youtube_v3.Schema$VideoListResponse> | null)[]
+      >
     >((promise, idArrays) => {
       return promise.then(previousResults =>
         Promise.allSettled(
@@ -337,11 +340,12 @@ export async function downloadYouTubePlaylist(
             return yt.videos.list({id: ids, part: ['contentDetails']})
           })
         ).then(results => {
-          const successfullResults: (GaxiosResponse<youtube_v3.Schema$VideoListResponse> | null)[] =
+          const successfullResults: (GaxiosResponseWithHTTP2<youtube_v3.Schema$VideoListResponse> | null)[] =
             []
 
           results.forEach((response, resultIndex) => {
             if (response.status === 'fulfilled') {
+              response.value
               successfullResults.push(response.value)
             } else {
               failures.push({
@@ -399,10 +403,10 @@ export async function downloadYouTubePlaylist(
         const duration = contentDetails.duration
         const partialVideo = partialVideosMetadataObj[id]
 
-        if (!partialVideo) {
-          failures.push({type: 'partialVideoNotFound', id, date: Date.now()})
-        } else {
+        if (partialVideo) {
           acc[id] = parseISO8601DurationToSeconds(duration)
+        } else {
+          failures.push({type: 'partialVideoNotFound', id, date: Date.now()})
         }
       })
 

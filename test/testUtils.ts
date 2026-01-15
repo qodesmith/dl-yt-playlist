@@ -1,13 +1,13 @@
 import type {youtube_v3} from '@googleapis/youtube'
-import type {GaxiosResponse} from 'googleapis-common'
+import type {GaxiosResponseWithHTTP2} from 'googleapis-common'
 
+import {mock} from 'bun:test'
 import path from 'node:path'
 
 import {chunkArray} from '@qodestack/utils'
-import {mock} from 'bun:test'
 
 type PlaylistResponse =
-  GaxiosResponse<youtube_v3.Schema$PlaylistItemListResponse>['data']
+  GaxiosResponseWithHTTP2<youtube_v3.Schema$PlaylistItemListResponse>['data']
 type PlaylistResponseVideo = NonNullable<PlaylistResponse['items']>[number]
 
 type MockOptions = {
@@ -31,9 +31,8 @@ export async function genMockYoutubeResponses({
     import.meta.dirname,
     './youtubePlaylistResponses.json'
   )
-  const playlistResponses: PlaylistResponse[] = await Bun.file(
-    playlistJsonPath
-  ).json()
+  const playlistResponses: PlaylistResponse[] =
+    await Bun.file(playlistJsonPath).json()
 
   // Update deleted or private video titles to how the API would return them.
   playlistResponses.forEach(response => {

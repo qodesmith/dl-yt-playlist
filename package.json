@@ -58,6 +58,7 @@
     "bun-plugin-dts": "^0.3.0",
     "bun-types": "latest",
     "dotenv": "^17.2.3",
-    "globals": "^17.0.0"
+    "globals": "^17.0.0",
+    "googleapis-common": "^8.0.1"
   }
 }
