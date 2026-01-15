@@ -25,18 +25,20 @@
     "typecheck": "bun tsc --noEmit",
     "build": "bun build.ts",
     "publishPackage": "npm run typecheck && npm run build && npm publish",
-    "test": "bun test --timeout=30000 --bail=1 ./test/test.ts"
+    "test": "bun test --timeout=30000 --bail=1 ./test/test.ts",
+    "check": "biome check",
+    "check:fix": "biome check --write .",
+    "lint": "biome lint",
+    "lint:fix": "biome lint --write .",
+    "format": "biome format",
+    "format:fix": "biome format --write ."
   },
   "description": "Download all videos (or audio only) from a YouTube playlist!",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/qodesmith/dl-yt-playlist.git"
   },
-  "keywords": [
-    "download",
-    "youtube",
-    "playlist"
-  ],
+  "keywords": ["download", "youtube", "playlist"],
   "author": "Qodesmith",
   "license": "ISC",
   "bugs": {
@@ -45,24 +47,17 @@
   "homepage": "https://github.com/qodesmith/dl-yt-playlist#readme",
   "prettier": "@qodestack/prettier-config",
   "dependencies": {
-    "@googleapis/youtube": "^20.0.0",
-    "@qodestack/utils": "^2.8.0",
+    "@googleapis/youtube": "^30.2.0",
+    "@qodestack/utils": "^2.28.0",
     "cli-progress": "^3.12.0",
-    "valibot": "^0.36.0"
+    "valibot": "^1.2.0"
   },
   "devDependencies": {
-    "@eslint/js": "^9.16.0",
-    "@qodestack/prettier-config": "^1.0.2",
+    "@qodestack/biome-config": "^2.3.1",
     "@types/cli-progress": "^3.11.6",
-    "@typescript-eslint/parser": "^8.17.0",
     "bun-plugin-dts": "^0.3.0",
     "bun-types": "latest",
-    "dotenv": "^16.4.7",
-    "eslint": "^9.16.0",
-    "eslint-config-prettier": "^9.1.0",
-    "eslint-import-resolver-typescript": "^3.7.0",
-    "eslint-plugin-import": "^2.31.0",
-    "globals": "^15.12.0",
-    "typescript-eslint": "^8.16.0"
+    "dotenv": "^17.2.3",
+    "globals": "^17.0.0"
   }
 }
