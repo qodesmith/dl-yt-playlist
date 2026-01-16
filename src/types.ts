@@ -1,9 +1,7 @@
 import type {youtube_v3} from '@googleapis/youtube'
-import type {GaxiosResponse} from 'googleapis-common'
-
-import {InferInput, InferIssue} from 'valibot'
-
-import {
+import type {GaxiosResponseWithHTTP2} from 'googleapis-common'
+import type {InferInput, InferIssue} from 'valibot'
+import type {
   PlaylistItemSchema,
   VideoSchema,
   VideosListItemSchema,
@@ -156,13 +154,13 @@ export type DownloadYouTubePlaylistOutput = {
    * The raw responses from the YouTube
    * [PlaylistItems API](https://developers.google.com/youtube/v3/docs/playlistItems).
    */
-  playlistItemListResponses: GaxiosResponse<youtube_v3.Schema$PlaylistItemListResponse>[]
+  playlistItemListResponses: GaxiosResponseWithHTTP2<youtube_v3.Schema$PlaylistItemListResponse>[]
 
   /**
    * The raw responses from the YouTube
    * [VideosList API](https://developers.google.com/youtube/v3/docs/videos/list).
    */
-  videoListResponses: (GaxiosResponse<youtube_v3.Schema$VideoListResponse> | null)[]
+  videoListResponses: (GaxiosResponseWithHTTP2<youtube_v3.Schema$VideoListResponse> | null)[]
 
   /**
    * Metadata for videos that were downloaded.

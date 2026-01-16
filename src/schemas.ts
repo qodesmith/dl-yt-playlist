@@ -1,13 +1,13 @@
 import {
-  object,
-  string,
-  number,
-  optional,
   array,
-  minLength,
-  pipe,
-  nullable,
   boolean,
+  minLength,
+  nullable,
+  number,
+  object,
+  optional,
+  pipe,
+  string,
 } from 'valibot'
 
 /**
@@ -53,6 +53,7 @@ export const VideosListItemSchema = object({
   }),
 })
 
+// biome-ignore-start lint/style/useNamingConvention: this is the expected schema
 /**
  * `yt-dlp` provides it's own metadata for videos. While this project relies
  * mainly on the Youtube APIs for metadata, we use metadata from `yt-dlp` for
@@ -78,6 +79,7 @@ export const YtDlpJsonSchema = object({
     minLength(1)
   ),
 })
+// biome-ignore-end lint/style/useNamingConvention: this is the expected schema
 
 export const VideoSchema = object({
   /** listApi.snippet.resourceId.videoId */

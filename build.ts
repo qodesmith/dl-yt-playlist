@@ -13,4 +13,5 @@ await Bun.build({
 })
 
 const totalTime = ((performance.now() - start) / 1000).toFixed(2)
+// biome-ignore lint/suspicious/noConsole: it's ok
 console.log(`Finished building in ${totalTime} seconds`)

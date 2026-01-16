@@ -1,12 +1,14 @@
+import type {DownloadYouTubePlaylistInput} from '../src/types'
+
+import {afterEach, beforeEach, describe, expect, mock, test} from 'bun:test'
 import fs from 'node:fs'
 import path from 'node:path'
+import process from 'node:process'
 
-import {test, describe, beforeEach, expect, afterEach, mock} from 'bun:test'
 import dotenv from 'dotenv'
 
-import {genMockYoutubeResponses} from './testUtils'
 import {downloadYouTubePlaylist} from '../src/main'
-import {DownloadYouTubePlaylistInput} from '../src/types'
+import {genMockYoutubeResponses} from './testUtils'
 
 const envDir = path.resolve(import.meta.dirname, '../.env')
 const mediaDir = path.resolve(import.meta.dirname, './media')
@@ -15,7 +17,7 @@ dotenv.config({path: envDir})
 
 const {PLAYLIST_ID, API_KEY} = process.env
 
-if (!PLAYLIST_ID || !API_KEY) {
+if (!(PLAYLIST_ID && API_KEY)) {
   throw new Error('Missing env variables')
 }
 
@@ -46,7 +48,7 @@ describe('downloadYoutubePlaylist', () => {
       ...baseOptions,
       downloadType: 'audio',
       getIdsForDownload: ids => {
-        data.videoId = ids[0]!
+        data.videoId = ids[0]
         return ids.slice(0, 1) // Only 1 id.
       },
       directory: mediaDir,
@@ -67,7 +69,8 @@ describe('downloadYoutubePlaylist', () => {
     // Assert relevant results data.
     expect(results.videoListResponses).toBeArrayOfSize(1)
     expect(results.videosDownloaded).toBeArrayOfSize(1)
-    expect(results.videosDownloaded[0]!.id).toBe(data.videoId!)
+    expect(results.videosDownloaded[0]?.id).not.toBeUndefined()
+    expect(results.videosDownloaded[0]?.id).toBe(data.videoId)
     expect(results.downloadCount).toEqual({audio: 1, video: 0, thumbnail: 0})
     expect(results.youTubeFetchCount).toBe(4)
   })
@@ -124,7 +127,8 @@ describe('downloadYoutubePlaylist', () => {
     // Assert relevant results data.
     expect(results.videoListResponses).toBeArrayOfSize(1)
     expect(results.videosDownloaded).toBeArrayOfSize(1)
-    expect(results.videosDownloaded[0]!.id).toBe(videoId)
+    expect(results.videosDownloaded[0]?.id).not.toBeUndefined()
+    expect(results.videosDownloaded[0]?.id).toBe(videoId)
     expect(results.downloadCount).toEqual({audio: 0, video: 1, thumbnail: 0})
     expect(results.youTubeFetchCount).toBe(4)
   })

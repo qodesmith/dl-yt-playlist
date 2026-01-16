@@ -1,12 +1,11 @@
 import type {youtube_v3} from '@googleapis/youtube'
-import type {GaxiosResponse} from 'googleapis-common'
+import type {GaxiosResponseWithHTTP2} from 'googleapis-common'
+import type {Failure} from './types'
 
 import {execSync} from 'node:child_process'
 import fs from 'node:fs'
 
 import {errorToObject, pluralize, sanitizeDecimal} from '@qodestack/utils'
-
-import {Failure} from './types'
 
 export const MAX_YOUTUBE_RESULTS = 50
 
@@ -35,7 +34,9 @@ export async function genPlaylistItems({
 
   /** Maximum number of videos to fetch from the API. */
   totalItemsToFetch: number
-}): Promise<GaxiosResponse<youtube_v3.Schema$PlaylistItemListResponse>[]> {
+}): Promise<
+  GaxiosResponseWithHTTP2<youtube_v3.Schema$PlaylistItemListResponse>[]
+> {
   return _genPlaylistItems({
     yt,
     playlistId,
@@ -95,9 +96,11 @@ async function _genPlaylistItems({
    * Will be provided in resursive calls. An array retaining all API responses.
    */
   responses: Awaited<
-    GaxiosResponse<youtube_v3.Schema$PlaylistItemListResponse>
+    GaxiosResponseWithHTTP2<youtube_v3.Schema$PlaylistItemListResponse>
   >[]
-}): Promise<GaxiosResponse<youtube_v3.Schema$PlaylistItemListResponse>[]> {
+}): Promise<
+  GaxiosResponseWithHTTP2<youtube_v3.Schema$PlaylistItemListResponse>[]
+> {
   const itemsLeftToFetch = totalItemsToFetch - itemsFetchedCount
   const maxResults =
     itemsLeftToFetch > 0 && itemsLeftToFetch <= MAX_YOUTUBE_RESULTS
@@ -180,7 +183,7 @@ async function _downloadThumbnailFile({
   }
 
   // We know we have a string based on the check above.
-  const url = redirectedUrl ?? urls[index]!
+  const url = redirectedUrl ?? urls[index] ?? ''
 
   return fetch(url, {
     method: 'GET',
@@ -248,7 +251,7 @@ export function getLufsForFile(filePath: string): number | {error: string} {
     const valueItem = resArray.at(-2)
     const num = Number(valueItem)
 
-    return isNaN(num) ? {error: `Unexpected \`NaN\`: ${valueItem}`} : num
+    return Number.isNaN(num) ? {error: `Unexpected \`NaN\`: ${valueItem}`} : num
   } catch (e) {
     return {error: (e as Error).message}
   }
@@ -271,18 +274,18 @@ export function parseISO8601DurationToSeconds(durationString: string) {
     /^P(?:(\d+)Y)?(?:(\d+)M)?(?:(\d+)W)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d{1,3})?)S)?)?$/
 
   const matches = durationString.match(regex) ?? []
-  const years = matches[1] ? parseInt(matches[1]) : 0
-  const months = matches[2] ? parseInt(matches[2]) : 0
-  const weeks = matches[3] ? parseInt(matches[3]) : 0
-  const days = matches[4] ? parseInt(matches[4]) : 0
-  const hours = matches[5] ? parseInt(matches[5]) : 0
-  const minutes = matches[6] ? parseInt(matches[6]) : 0
+  const years = matches[1] ? parseInt(matches[1], 10) : 0
+  const months = matches[2] ? parseInt(matches[2], 10) : 0
+  const weeks = matches[3] ? parseInt(matches[3], 10) : 0
+  const days = matches[4] ? parseInt(matches[4], 10) : 0
+  const hours = matches[5] ? parseInt(matches[5], 10) : 0
+  const minutes = matches[6] ? parseInt(matches[6], 10) : 0
   const seconds = matches[7] ? parseFloat(matches[7]) : 0
   const totalSeconds =
-    years * 31536000 +
-    months * 2592000 +
-    weeks * 604800 +
-    days * 86400 +
+    years * 31_536_000 +
+    months * 2_592_000 +
+    weeks * 604_800 +
+    days * 86_400 +
     hours * 3600 +
     minutes * 60 +
     seconds
