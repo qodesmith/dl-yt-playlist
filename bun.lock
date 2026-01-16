@@ -40,7 +40,7 @@
 
     "@biomejs/cli-win32-x64": ["@biomejs/cli-win32-x64@2.3.8", "", { "os": "win32", "cpu": "x64" }, "sha512-RguzimPoZWtBapfKhKjcWXBVI91tiSprqdBYu7tWhgN8pKRZhw24rFeNZTNf6UiBfjCYCi9eFQs/JzJZIhuK4w=="],
 
-    "@googleapis/youtube": ["@googleapis/youtube@30.2.0", "", { "dependencies": { "googleapis-common": "^8.0.0" } }, "sha512-magOuTRMZegaUHy1oYftZiipmLvJVRuZqZkXD2ls3QPAjWvc/+aILT3yY2HlDHF8Va93GVeow/ZIzMNoVJsQlA=="],
+    "@googleapis/youtube": ["@googleapis/youtube@30.3.0", "", { "dependencies": { "googleapis-common": "^8.0.0" } }, "sha512-POrCCTkDVQWpBOq5UOfG4Bk03axgSnG0CnYEnssHKJX3idcWF/P6fK3LrOTdzE+/0pWzWqIWcmxUdgVETfuxIg=="],
 
     "@isaacs/cliui": ["@isaacs/cliui@8.0.2", "", { "dependencies": { "string-width": "^5.1.2", "string-width-cjs": "npm:string-width@^4.2.0", "strip-ansi": "^7.0.1", "strip-ansi-cjs": "npm:strip-ansi@^6.0.1", "wrap-ansi": "^8.1.0", "wrap-ansi-cjs": "npm:wrap-ansi@^7.0.0" } }, "sha512-O8jcjabXaleOG9DQ0+ARXWZBTfnP4WNAqzuiJK7ll44AmxGKv/J2M4TPjxjY3znBCfvBXFzucm1twdyFybFqEA=="],
 
